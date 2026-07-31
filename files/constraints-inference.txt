@@ -1,0 +1,10 @@
+torch==2.9.0+cu128
+torchvision==0.24.0+cu128
+torchaudio==2.9.0+cu128
+triton==3.5.0
+numpy==1.26.4
+datasets==3.6.0
+transformers==4.57.3
+tyro==0.9.17
+click==8.1.8
+gymnasium==1.2.2

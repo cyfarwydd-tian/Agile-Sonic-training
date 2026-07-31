@@ -1,0 +1,4 @@
+cuda-bindings==12.8.0
+cuda-python==12.8.0
+onnxruntime==1.27.0
+tensorrt-cu12==10.13.3.9

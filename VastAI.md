@@ -1,147 +1,72 @@
-Running with VastAI
-===================
+# Vast.ai deployment notes
 
-* VastAI
+Vast.ai 只作为可选 GPU 供应商。正式训练仍应遵守本仓库 README 中的镜像、
+挂载、preflight、NCCL 和 checkpoint 门禁。
 
-  [Vast.ai](https://vast.ai) is an online marketplace for renting and offering GPU compute, mainly used for AI, machine learning, deep learning, and rendering workloads.
+## Before renting
 
-* Getting VastAI CLI and configure the API Key
+选择实例时至少核对：
 
-  Getting VastAI:
+- GPU 型号、显存和 GPU 数量。
+- NVIDIA driver/CUDA compatibility。
+- GPU 间拓扑、PCIe/NVLink 和 NCCL 带宽。
+- CPU 核数、内存和本地 NVMe。
+- 实例最长可用时间、可靠性和上下行带宽。
 
-  ```
-  mkdir -p ~/.local/bin
-  wget https://raw.githubusercontent.com/vast-ai/vast-python/master/vast.py -O ~/.local/bin/vastai
-  chmod +x ~/.local/bin/vastai
-  ```
+完整 SONIC 环境、数据、缓存与 checkpoint 会占用大量空间。正式任务推荐至少
+准备 300 GB，较大数据集建议 400–500 GB 或更多；不要沿用旧文档中的 32 GB 示例。
 
-  To create an API key, log in to the VastAI console. In the left navigation menu, click "Keys", then open the "API Keys" tab and click "New". In the pop-up window, enter a "Name" for the key and configure the permissions in the "Standard" tab, then click "Save". In the next pop-up window, copy the API key and store it securely.
+## Image
 
-  After getting the API key, you can configure the VastAI CLI:
+CI 发布的镜像位于：
 
-  ```
-  vastai set api-key xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-  ```
+```text
+ghcr.io/cyfarwydd-tian/agile-sonic-training
+```
 
-* Search For Available Machines
+优先使用 immutable digest：
 
-  You can use the `vastai search offers` command to search for available machines. E.g. if your target is 4x RTX 5090, CUDA Version > 12.8, internet download and upload speed > 1Gbps, PCIE generation > 5.0, and sort by price, you can run:
+```text
+ghcr.io/cyfarwydd-tian/agile-sonic-training@sha256:<digest>
+```
 
-  ```
-  vastai search offers -o dph gpu_name=RTX_5090 \
-                              num_gpus=4 \
-                              'cuda_vers >= 12.8' \
-                              'inet_down >= 1000' \
-                              'inet_up >= 1000' \
-                              'pci_gen >= 5'
-  ```
+若 GHCR package 为 private，应在 Vast.ai 控制台中使用只具备
+`read:packages` 权限的专用 token 配置 registry credential。不要把 token 放入
+实例启动命令、公开模板或训练日志。
 
-  You will get something like:
+## Storage and source
 
-  ```
-  ID        CUDA   N  Model     PCIE  cpu_ghz  vCPUs    RAM  VRAM  Disk  $/hr    DLP    DLP/$   score  NV Driver   Net_up  Net_down  R     Max_Days  mach_id  status    host_id  ports  country
-  28481728  12.8  4x  RTX_5090  54.2  3.1      51.2   309.5  32.6  4305  1.8681  587.3  314.37  405.0  570.181     6765.7  3886.0    99.2  114.8     41437    verified  60400    19999  Texas,_US
-  28324445  12.8  4x  RTX_5090  54.0  3.1      64.0   386.8  32.6  2870  2.0281  644.3  317.71  417.5  570.169     7099.7  3731.2    99.3  158.2     40291    verified  60400    24999  Texas,_US
-  28273725  13.0  4x  RTX_5090  26.9  2.4      96.0   193.2  32.6  1362  2.0774  481.5  231.76  310.9  580.95.05   6554.2  7531.4    99.5  181.7     44827    verified  208817   499    Ontario,_CA
-  28737216  12.9  4x  RTX_5090  54.1  2.2      170.7  343.6  32.6  3996  2.1356  645.2  302.09  386.7  575.64.05   6205.3  6456.6    99.1  179.7     40584    verified  54667    399    New_York,_US
-  28761955  13.0  4x  RTX_5090  54.1  3.1      256.0  515.4  32.6  5558  2.1356  645.6  302.31  382.6  580.105.08  5426.5  6606.8    99.7  150.2     8990     verified  54667    498    New_York,_US
-  28676506  13.0  4x  RTX_5090  54.2  2.4      192.0  773.8  32.6  1586  2.2414  645.6  288.04  366.4  580.95.05   7523.4  4018.1    99.4  64.4      42795    verified  60400    19999  Texas,_US
-  27137978  12.8  4x  RTX_5090  54.2  3.1      128.0  580.3  32.6  3127  2.4014  553.5  230.50  285.5  570.195.03  3289.2  4934.2    99.7  130.9     45707    verified  1647     149    Iceland,_IS
-  25531503  12.9  4x  RTX_5090  49.7  2.6      96.0   386.8  32.6  2558  2.4547  629.0  256.26  321.4  575.57.08   3525.3  3579.4    99.9  322.2     8461     verified  18       124    Alberta,_CA
-  ```
+容器镜像不包含私有 `sonic-training` 源码和训练数据。实例启动后按以下稳定路径准备：
 
-  You can choose one from the list and mark the `<OFFER ID>`.
+```text
+/workspace/sonic-training   private source checkout
+/datasets                  read-only training data
+/runs                      checkpoints, logs and W&B offline runs
+/cache                     node-local Isaac/HF/Torch/NVIDIA caches
+```
 
-* Create an Instance
+数据同步结束后，先验证 manifest、文件数量和 SHA-256，再启动训练。Spot/interruptible
+实例必须把 `/runs` 定期同步到持久对象存储。
 
-  To create an instance, you need a container registry and tag that are accessible over the internet. You must also provide the environment variables to be passed to the container, along with the disk size in GB and the command to run. For a container built from this repository:
+## SSH
 
-  ```
-  vastai create instance <OFFER_ID> --image ghcr.io/luxianzi/starvla-training:<Image Hash>
-                                    --env '-p 22:22 -e SSH_USER_PUBLIC_KEY="ssh-rsa AAAA..."'
-                                    --disk 32
-                                    --args /usr/bin/sleep infinity
-  ```
+镜像只允许 SSH public-key authentication，不提供默认密码。建议由 Vast.ai 平台负责
+宿主机 SSH；如必须暴露容器 sshd，使用 `SSH_AUTHORIZED_KEYS_FILE` 或
+`SSH_AUTHORIZED_KEYS`，并只映射平台分配的端口。
 
-  Please note that you must pass /usr/bin/sleep infinity to keep the container running. The terminal output will include a `<Contract ID>`.
+## Required gates
 
-  ```
-  Started. {'success': True, 'new_contract': <Instance ID>}
-  ```
+实例准备完成后依次运行：
 
-  You can also get this `<Instance ID>` by the `show instances` command.
+```bash
+agile-sonic-preflight
+agile-sonic-nccl-smoke --gpu-count <visible-gpu-count>
+```
 
-  ```
-  # vastai show instances
-  ID        Machine  Status   Num  Model     Util. %  vCPUs    RAM  Storage  SSH Addr  SSH Port  $/hr    Image                                                                         Net up  Net down  R     Label  age(hours)  uptime(mins)
-  28785454  41437    running   1x  RTX_5090  -        12.8   773.7  32       -         -         0.4756  ghcr.io/luxianzi/internvla-training:e7792247d57c9c890d89d7a3316ceb825db44341  6765.7  3886.0    99.3  -      0.08        -
-  ```
+然后执行 2-GPU、2-update SONIC smoke，验证 checkpoint 保存和同拓扑恢复。只有
+环境版本、GPU 数量、NCCL、数据门禁、写盘、恢复以及短时全卡压力测试全部通过后，
+才启动正式训练。
 
-  The number `28785454` above is the `<Instance ID>`. When the status turns to "runing", you can get the server IP address and port as the following.
-
-  ```
-  vastai show instance <Instance ID> --raw | jq -r '.public_ipaddr'
-  vastai show instance <Instance ID> --raw | jq -r '.ports."22/tcp"[0].HostPort'
-  ```
-
-  Then you can connect to the instance using the IP address and port.
-
-* Synchronizing Data with Amazon S3
-
-  The VastAI CLI provides functionality to synchronize data between an Amazon S3 storage bucket and an instance. Before using this feature, you must configure the S3 connection via the web UI and obtain the `<Connection ID>`.
-
-  ```
-  # vastai show connections
-  ID     NAME                Cloud Type
-  34131  some-training-data  s3
-  ```
-
-  The number `34131` above is the `<Connection ID>`.
-
-  To copy data between the S3 and the instance, you must also provide the `<S3 Bucket Path>`, `<Instance Path>`, `<Instance ID>` and `<Transfer Type>`.
-
-  Copy from the S3 to the instance, you can run the following command.
-
-  ```
-  vastai cloud copy --src <S3 Bucket Path> --dst <Instance Path> --instance <Instance ID> --connection <Connection ID> --transfer "Cloud To Instance"
-  ```
-
-  Copy from the instance to the S3, you can run the following command.
-
-  ```
-  vastai cloud copy --src <Instance Path> --dst  <S3 Bucket Path> --instance <Instance ID> --connection <Connection ID> --transfer "Instance To Cloud"
-  ```
-
-  For example:
-
-  ```
-  vastai cloud copy --src /some-training-data/ --dst /home/worker/share --instance 28791005 --connection 34131 --transfer "Cloud To Instance"
-  ```
-
-  The command above only start the copy operation, you can check the copy progress using the following command.
-
-  ```
-  vastai show instance <Instance ID> --raw | jq -r ".status_msg"
-  ```
-
-  You will see the message: "Cloud Copy Operation Complete", when the copy is done.
-
-* Handle with Unstable Network Connection
-
-  You will need to run the training with `nohup` command, also redirect stderr to the log file and ends with a `&` symbol. `nohup` keeps the command running even the SSH connection breaks. `&` symbol sends the command to the background. For example:
-
-  ```
-  nohup accelerate launch --config-file config.yaml --num_processes 1 train.py --config_yaml training.yaml > log.txt 2>&1 < /dev/null &
-  ```
-
-  You can find the training log in log.txt.
-
-* Destroy The Instance
-
-  All instances on VastAI are on-demand, do not forget to destroy the instance when your work is done. Storage charge will still apply when the instance is stopped.
-
-  ```
-  vastai destory instance <Instance ID>
-  ```
-
-For detailed instructions on using the CLI, see the [VastAI CLI Documents](https://docs.vast.ai/cli/get-started)
+训练进程应由本仓库的多卡 launcher 和外部 manager 管理。不要仅依赖 SSH session、
+`nohup` 或容器可写层保存状态。实例销毁前确认所有 checkpoint、日志和 W&B offline
+目录已经同步完成。

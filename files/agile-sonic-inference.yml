@@ -1,0 +1,8 @@
+name: agile-sonic-inference
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12
+  - pip=25.1.1
+  - setuptools=78.1.1
+  - wheel=0.46.2

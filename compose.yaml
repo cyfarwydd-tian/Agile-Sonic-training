@@ -1,0 +1,77 @@
+name: agile-sonic-training
+
+services:
+  sonic-training:
+    image: ${IMAGE:-agile-sonic-training:latest}
+    build:
+      context: .
+      target: ${BUILD_TARGET:-full}
+      args:
+        UID: ${HOST_UID:-1000}
+        GID: ${HOST_GID:-1000}
+        USERNAME: ${CONTAINER_USER:-fangzhengtian}
+    container_name: ${CONTAINER_NAME:-agile-sonic-training}
+    hostname: ${CONTAINER_NAME:-agile-sonic-training}
+    init: true
+    ipc: host
+    gpus: all
+    cap_add:
+      - IPC_LOCK
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: ${NOFILE_LIMIT:-1048576}
+        hard: ${NOFILE_LIMIT:-1048576}
+      stack:
+        soft: ${STACK_LIMIT:-67108864}
+        hard: ${STACK_LIMIT:-67108864}
+    working_dir: /workspace/sonic-training
+    stdin_open: true
+    tty: true
+    stop_grace_period: 2m
+    volumes:
+      - type: bind
+        source: ${SONIC_SOURCE:?set SONIC_SOURCE to the private sonic-training checkout}
+        target: /workspace/sonic-training
+      - type: bind
+        source: ${DATASETS_DIR:?set DATASETS_DIR to the host dataset directory}
+        target: /datasets
+        read_only: ${DATASETS_READ_ONLY:-true}
+      - type: bind
+        source: ${RUNS_DIR:-./runs}
+        target: /runs
+      - type: bind
+        source: ${CACHE_DIR:-./.cache/agile-sonic}
+        target: /cache
+    environment:
+      HOST_UID: ${HOST_UID:-1000}
+      HOST_GID: ${HOST_GID:-1000}
+      GPU_REQUEST: ${GPU_REQUEST:-all}
+      # Leave blank to let the training wrappers count visible devices.
+      GPU_COUNT: ${GPU_COUNT:-}
+      # Unlike Docker CLI --gpus, this must be plain `0,1` (not `device=0,1`).
+      NVIDIA_VISIBLE_DEVICES: ${NVIDIA_VISIBLE_DEVICES:-all}
+      RUNS_DIR: /runs
+      SONIC_ENV: ${SONIC_ENV:-agile-sonic}
+      CONDA_ENV_NAME: ${SONIC_ENV:-agile-sonic}
+      SONIC_EXPECTED_REVISION: ${SONIC_EXPECTED_REVISION:-}
+      SONIC_REQUIRE_CLEAN: ${SONIC_REQUIRE_CLEAN:-0}
+      XDG_CACHE_HOME: /cache/xdg
+      HF_HOME: /cache/huggingface
+      TORCH_HOME: /cache/torch
+      TORCH_EXTENSIONS_DIR: /cache/torch_extensions
+      WANDB_CACHE_DIR: /cache/wandb
+      NCCL_DEBUG: ${NCCL_DEBUG:-WARN}
+      TORCH_NCCL_ASYNC_ERROR_HANDLING: ${TORCH_NCCL_ASYNC_ERROR_HANDLING:-1}
+      WANDB_MODE: ${WANDB_MODE:-offline}
+      ACCEPT_EULA: ${ACCEPT_EULA:-Y}
+      PRIVACY_CONSENT: ${PRIVACY_CONSENT:-Y}
+      # Opt in only for simple local bind mounts. Keep disabled for NFS/ACL paths.
+      FIX_MOUNT_OWNERSHIP: ${FIX_MOUNT_OWNERSHIP:-0}
+    logging:
+      driver: json-file
+      options:
+        max-size: ${DOCKER_LOG_MAX_SIZE:-100m}
+        max-file: "${DOCKER_LOG_MAX_FILE:-5}"
