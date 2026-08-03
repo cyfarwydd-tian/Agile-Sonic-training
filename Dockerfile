@@ -230,6 +230,9 @@ RUN install -d -m 0755 /run/secrets \
 COPY --chmod=0755 files/entrypoint.sh /usr/local/sbin/entrypoint.sh
 COPY --chmod=0755 files/sonic-env.sh /etc/profile.d/agile-sonic.sh
 COPY --chmod=0644 files/nccl-runtime.sh /usr/local/lib/agile-sonic/nccl-runtime.sh
+RUN chmod 0755 /usr/local/lib/agile-sonic \
+    && runuser -u "${CONTAINER_USER}" -- bash -c \
+      'source /usr/local/lib/agile-sonic/nccl-runtime.sh; declare -F agile_sonic_enable_nccl_runtime >/dev/null'
 COPY --chmod=0755 scripts/ /opt/agile-sonic/scripts/
 COPY --chmod=0755 files/agile-sonic-preflight.sh /usr/local/bin/agile-sonic-preflight
 COPY --chmod=0755 files/agile-sonic-nccl-smoke.sh /usr/local/bin/agile-sonic-nccl-smoke
