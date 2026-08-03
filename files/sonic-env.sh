@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # shellcheck shell=bash
 
+# shellcheck source=files/nccl-runtime.sh
+source /usr/local/lib/agile-sonic/nccl-runtime.sh
+
 if [[ -r /run/agile-sonic/runtime.env ]]; then
     # shellcheck source=/dev/null
     source /run/agile-sonic/runtime.env
@@ -38,5 +41,10 @@ if [[ -d "${sonic_prefix}/bin" ]]; then
     export CONDA_DEFAULT_ENV="${sonic_env}"
     export CONDA_PREFIX="${sonic_prefix}"
     export PATH="${sonic_prefix}/bin:/opt/miniforge3/condabin:${sonic_filtered_path}"
+    if [[ "${sonic_env}" == "agile-sonic" ]]; then
+        agile_sonic_enable_nccl_runtime
+    else
+        agile_sonic_disable_nccl_runtime
+    fi
 fi
 unset sonic_env sonic_prefix sonic_filtered_path sonic_path_part sonic_path_parts

@@ -90,6 +90,7 @@ The default Conda environment is `agile-sonic`:
 | PyTorch | 2.7.0 + CUDA 12.8 |
 | TorchVision | 0.22.0 + CUDA 12.8 |
 | TorchAudio | 2.7.0 + CUDA 12.8 |
+| NCCL runtime | 2.26.5 compatibility patch over PyTorch's pinned 2.26.2 wheel |
 | Triton | 3.3.0 |
 | Isaac Sim | 5.1.0, including Kit/SDK/Physics extension caches |
 | Isaac Lab | 2.3.2, pinned source revision |

@@ -99,6 +99,7 @@ case "${mode}" in
         : "${TORCHVISION_VERSION:?TORCHVISION_VERSION is required}"
         : "${TORCHAUDIO_VERSION:?TORCHAUDIO_VERSION is required}"
         : "${TORCH_CUDA:?TORCH_CUDA is required}"
+        : "${NCCL_RUNTIME_VERSION:?NCCL_RUNTIME_VERSION is required}"
         if [[ "${PYTHON_VERSION}" != "3.11" \
               && "${PYTHON_VERSION}" != 3.11.* ]]; then
             echo "Isaac Sim 5.1 requires PYTHON_VERSION=3.11" >&2
@@ -126,6 +127,14 @@ case "${mode}" in
             "${TORCH_CUDA}"
         validate_distribution "${training_python}" torch \
             "${TORCH_VERSION}+${TORCH_CUDA}"
+        # PyTorch 2.7.0+cu128 pins NCCL 2.26.2 in distribution metadata, but
+        # that runtime faults on Blackwell P2P/IPC. Keep the pinned wheel so
+        # pip check remains truthful, and vendor NVIDIA's ABI-compatible patch
+        # runtime for training launchers to preload explicitly.
+        pip_install "${training_python}" \
+            --no-deps \
+            --target /opt/agile-sonic/nccl-runtime \
+            "nvidia-nccl-cu12==${NCCL_RUNTIME_VERSION}"
         ;;
 
     training-isaac)
@@ -234,6 +243,9 @@ case "${mode}" in
         "${training_python}" -c \
             'import torch, h5py, isaaclab, open3d, transformers, trl, accelerate, tensordict, pink, pinocchio; import gear_sonic.train_agent_trl; from smpl_sim.smpllib import smpl_eval; print("training imports: ok")' \
             > /opt/agile-sonic/manifests/agile-sonic.import-smoke.txt
+        LD_PRELOAD="${AGILE_SONIC_NCCL_LIBRARY}" "${training_python}" -c \
+            'import ctypes, os; value=ctypes.c_int(); lib=ctypes.CDLL(None); rc=lib.ncclGetVersion(ctypes.byref(value)); major, minor, patch=map(int, os.environ["AGILE_SONIC_NCCL_RUNTIME_VERSION"].split(".")); expected=major * 10000 + minor * 100 + patch; assert rc == 0 and value.value == expected, (rc, value.value, expected); print(f"NCCL runtime override: {value.value}")' \
+            > /opt/agile-sonic/manifests/agile-sonic.nccl-runtime.txt
 
         validate_distribution "${training_python}" torch \
             "${TORCH_VERSION}+${TORCH_CUDA}"

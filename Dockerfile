@@ -132,6 +132,7 @@ ARG TORCH_VERSION=2.7.0
 ARG TORCHVISION_VERSION=0.22.0
 ARG TORCHAUDIO_VERSION=2.7.0
 ARG TORCH_CUDA=cu128
+ARG NCCL_RUNTIME_VERSION=2.26.5
 ARG ISAACSIM_VERSION=5.1.0
 ARG ISAACLAB_VERSION=2.3.2
 ARG ISAACLAB_REPO=https://github.com/isaac-sim/IsaacLab.git
@@ -142,6 +143,8 @@ ARG SMPLSIM_REPO=https://github.com/ZhengyiLuo/SMPLSim.git
 ARG SMPLSIM_REF=b5c08720503ad5fff64050c4d289c42d947fcf8d
 ARG SMPLX_REPO=https://github.com/ZhengyiLuo/smplx.git
 ARG SMPLX_REF=a5b8e4ac14f79f3f33fd2cf2a16e6f507146b813
+ENV AGILE_SONIC_NCCL_RUNTIME_VERSION=${NCCL_RUNTIME_VERSION} \
+    AGILE_SONIC_NCCL_LIBRARY=/opt/agile-sonic/nccl-runtime/nvidia/nccl/lib/libnccl.so.2
 
 # Layer 1/6: Miniforge environment and CUDA-enabled PyTorch.
 RUN --mount=type=cache,id=agile-sonic-conda,target=/opt/conda-pkgs \
@@ -151,6 +154,7 @@ RUN --mount=type=cache,id=agile-sonic-conda,target=/opt/conda-pkgs \
     TORCHVISION_VERSION="${TORCHVISION_VERSION}" \
     TORCHAUDIO_VERSION="${TORCHAUDIO_VERSION}" \
     TORCH_CUDA="${TORCH_CUDA}" \
+    NCCL_RUNTIME_VERSION="${NCCL_RUNTIME_VERSION}" \
     /usr/local/sbin/init-training-env.sh training-base
 
 # Layer 2/6: Isaac Sim application packages and pinned Isaac Lab source.
@@ -225,6 +229,7 @@ RUN install -d -m 0755 /run/secrets \
 # dependency layer so launcher/entrypoint edits do not invalidate CUDA/Isaac.
 COPY --chmod=0755 files/entrypoint.sh /usr/local/sbin/entrypoint.sh
 COPY --chmod=0755 files/sonic-env.sh /etc/profile.d/agile-sonic.sh
+COPY --chmod=0644 files/nccl-runtime.sh /usr/local/lib/agile-sonic/nccl-runtime.sh
 COPY --chmod=0755 scripts/ /opt/agile-sonic/scripts/
 COPY --chmod=0755 files/agile-sonic-preflight.sh /usr/local/bin/agile-sonic-preflight
 COPY --chmod=0755 files/agile-sonic-nccl-smoke.sh /usr/local/bin/agile-sonic-nccl-smoke

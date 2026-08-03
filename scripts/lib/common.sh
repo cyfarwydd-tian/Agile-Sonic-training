@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
 
+if [[ -r /usr/local/lib/agile-sonic/nccl-runtime.sh ]]; then
+  # shellcheck source=files/nccl-runtime.sh
+  source /usr/local/lib/agile-sonic/nccl-runtime.sh
+fi
+
 log() {
   printf '[agile-sonic] %s\n' "$*"
 }
@@ -67,4 +72,7 @@ activate_training_env() {
   # interactive SONIC_ENV selection (tools/data/inference use incompatible
   # Python and PyTorch versions).
   activate_named_env agile-sonic
+  if declare -F agile_sonic_enable_nccl_runtime >/dev/null 2>&1; then
+    agile_sonic_enable_nccl_runtime
+  fi
 }

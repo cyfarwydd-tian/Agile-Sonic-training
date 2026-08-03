@@ -45,6 +45,13 @@ system
 - 无 `--target` 构建时默认得到 `full`；生产训练可以明确拉取更小的
   `latest-training`。
 
+PyTorch 2.7.0+cu128 的 wheel metadata 固定要求 NCCL 2.26.2，但该 runtime
+在 RTX PRO 6000 Blackwell 的双卡 P2P/IPC 路径会产生 illegal memory access。
+镜像保留原 distribution 以维持 `pip check`，同时预装 ABI 兼容的 NVIDIA
+NCCL 2.26.5 补丁库；training entrypoint、登录环境和 launchers 只在
+`agile-sonic` 环境中 preload 该库。tools/data/inference 环境不会继承这个
+override。构建门禁会调用 `ncclGetVersion` 验证实际动态库版本。
+
 ## 上游源码策略
 
 Isaac Lab、SONIC fallback、SMPLSim、smplx、CycloneDDS、RoboSuite、LeRobot 和

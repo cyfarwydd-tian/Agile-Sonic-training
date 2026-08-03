@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
+# shellcheck source=files/nccl-runtime.sh
+source /usr/local/lib/agile-sonic/nccl-runtime.sh
+
 die() {
     echo "agile-sonic entrypoint: $*" >&2
     exit 2
@@ -163,6 +166,11 @@ select_sonic_environment() {
     export CONDA_DEFAULT_ENV="${canonical}"
     export CONDA_PREFIX="${prefix}"
     export PATH="${prefix}/bin:${CONDA_DIR}/condabin:${filtered_path}"
+    if [[ "${canonical}" == "agile-sonic" ]]; then
+        agile_sonic_enable_nccl_runtime
+    else
+        agile_sonic_disable_nccl_runtime
+    fi
     install -d -m 0755 /run/agile-sonic
     printf '%s\n' "${canonical}" > /run/agile-sonic/environment
 }
