@@ -233,17 +233,21 @@ They validate:
 - atomic checkpoint-directory writes.
 - single-node multi-GPU NCCL all-reduce.
 
-Then run the minimal SONIC training smoke test:
+Then run the self-contained SONIC training smoke test on one GPU:
 
 ```bash
-agile-sonic-launch --gpu-count <GPU_COUNT> -- \
-  +exp=manager/universal_token/all_modes/sonic_release_h20_smoke \
-  headless=true \
-  use_wandb=false \
-  ++algo.config.num_learning_iterations=2
+scripts/sonic-training-smoke.sh \
+  --source /srv/agile-sonic/source \
+  --runs /srv/agile-sonic/runs \
+  --cache /srv/agile-sonic/cache \
+  --gpu 0
 ```
 
-The `h20` name in this experiment refers to the Agile H20 robot.
+This is a real two-update training test, not an import check. It packages a
+paired 120-frame H20 robot/SOMA fixture, runs Isaac rollouts and PPO, and fails
+unless every active encoder, decoder, critic and optimizer path changes between
+the two checkpoints. See [`smoke/sonic_h20/README.md`](smoke/sonic_h20/README.md)
+for its exact coverage. The `h20` name refers to the Agile H20 robot.
 
 Before production training, also verify checkpoint save/restore and complete at
 least a 15–30 minute all-GPU stability test. Pin the private project revision:
