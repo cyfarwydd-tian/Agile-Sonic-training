@@ -71,10 +71,13 @@ agile-sonic-nccl-smoke --gpu-count <visible-gpu-count>
 `nohup` 或容器可写层保存状态。实例销毁前确认所有 checkpoint、日志和 W&B offline
 目录已经同步完成。
 
-## Verified audit: instance 46687432
+## Verified clean rebuild: instance 46693892
 
-The immutable `training` image was tested on 2026-08-03 on one NVIDIA RTX PRO
-6000 Blackwell GPU. Full evidence and the chronological record are in
+The remediated immutable `training` image was cold-pulled onto a new 400 GB disk
+and tested on 2026-08-03 on one NVIDIA RTX PRO 6000 Blackwell GPU. Full evidence
+and the comparison with the first audit are in
+[`VASTAI_CLEAN_REBUILD_46693892.md`](VASTAI_CLEAN_REBUILD_46693892.md). The
+original discovery audit remains in
 [`VASTAI_AUDIT_46687432.md`](VASTAI_AUDIT_46687432.md).
 
 Verified host/runtime combination:
@@ -87,34 +90,21 @@ PyTorch:           2.7.0+cu128, including sm_120
 cuDNN / NCCL:      9.7.1 / 2.26.2
 ```
 
-PyTorch FP32/BF16 kernels, cuDNN forward/backward, a locally compiled `sm_120`
-CUDA extension, Isaac/Vulkan/PhysX and a real two-update SONIC H20 PPO smoke all
-passed. This host does not need its driver replaced for the current image.
+Across the discovery and clean-rebuild audits, PyTorch FP32/BF16 kernels, cuDNN
+forward/backward, a locally compiled `sm_120` CUDA extension,
+Isaac/Vulkan/PhysX and a real two-update SONIC H20 PPO smoke all passed. The
+clean-rebuild smoke used only dependencies baked into the new digest. This host
+does not need its driver replaced for the current image.
 
-### Workarounds needed by the current immutable digest
+### Current image behavior
 
-The tested digest does not contain `h5py` in its training environment. For a
-short-lived audit, install the pinned wheel into persistent cache without
-mutating Miniforge:
-
-```bash
-mkdir -p /cache/runtime-deps
-python -m pip install --no-deps \
-  --target /cache/runtime-deps \
-  h5py==3.13.0
-export PYTHONPATH="/cache/runtime-deps:${PYTHONPATH:-}"
-```
-
-The next image should bake this package into `agile-sonic`; do not make ad-hoc
-server-side pip installation the production deployment model.
-
-Isaac Sim's pip package otherwise selects read-only package-local Kit stores in
-Vast SSH mode. The current private SONIC trainer forwards this setting:
-
-```bash
-export SONIC_EXTRA_KIT_ARGS="--portable-root /cache/isaac-portable"
-mkdir -p /cache/isaac-portable
-```
+Digest
+`sha256:6ab2d3aac46c74bb97cae40611262c16163ef1b3aae9cf503ce7e97e2f6b7b59`
+contains `h5py==3.13.0`; do not install a server-side overlay. It also defaults
+Kit to `--portable-root /cache/isaac-portable` and bakes the non-root
+ComputeCache, Omniverse data and log links. These settings remained effective
+even when Vast bypassed the native entrypoint, and the prior package-local
+read-only errors did not recur.
 
 Raise the limits that the non-root session is allowed to raise:
 

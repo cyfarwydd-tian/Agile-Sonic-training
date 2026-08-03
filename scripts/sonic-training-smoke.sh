@@ -29,7 +29,7 @@ EOF
 }
 
 source_dir=""
-image="${IMAGE:-ghcr.io/cyfarwydd-tian/agile-sonic-training@sha256:ee1d166e25c897ce50076efa2b99f0e79597a56ff450113aa560d11e2f5a95ed}"
+image="${IMAGE:-ghcr.io/cyfarwydd-tian/agile-sonic-training@sha256:6ab2d3aac46c74bb97cae40611262c16163ef1b3aae9cf503ce7e97e2f6b7b59}"
 runs_dir="${RUNS_DIR:-${PWD}/runs}"
 cache_dir="${CACHE_DIR:-${PWD}/.cache/agile-sonic}"
 gpu_device="${GPU_DEVICE:-0}"

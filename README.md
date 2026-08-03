@@ -27,32 +27,36 @@ Those are mounted when the container starts.
 ## Current verified build
 
 The current verified artifact is the `training` target built from commit
-[`c84d6db`](https://github.com/cyfarwydd-tian/Agile-Sonic-training/commit/c84d6db26f056cba24e33126cb02ce754058af15).
+[`efd9c83`](https://github.com/cyfarwydd-tian/Agile-Sonic-training/commit/efd9c83465a0448dec855ad4c9088ac19a80cac5).
 
-- [Successful GitHub Actions run](https://github.com/cyfarwydd-tian/Agile-Sonic-training/actions/runs/30781508051)
-- Build and publish time: 22 minutes 9 seconds
-- Cold-build sampled disk consumption: 56,955,424,768 bytes
-- Minimum remaining runner space: 55,241,453,568 bytes
-- Total compressed image layers: 17,820,659,524 bytes
-- Largest compressed layer: 4,102,248,334 bytes
+- [Successful GitHub Actions run](https://github.com/cyfarwydd-tian/Agile-Sonic-training/actions/runs/30804335746)
+- Build and publish time: 22 minutes 57 seconds
+- Cold-build sampled disk consumption: 56,978,497,536 bytes
+- Minimum remaining runner space: 55,222,448,128 bytes
+- Largest compressed layer: 4,102,248,768 bytes
 - GHCR layer check, tag promotion and provenance attestation: passed
 
 Pull the exact immutable image:
 
 ```bash
 docker pull \
-  ghcr.io/cyfarwydd-tian/agile-sonic-training@sha256:ee1d166e25c897ce50076efa2b99f0e79597a56ff450113aa560d11e2f5a95ed
+  ghcr.io/cyfarwydd-tian/agile-sonic-training@sha256:6ab2d3aac46c74bb97cae40611262c16163ef1b3aae9cf503ce7e97e2f6b7b59
 ```
 
 The commit-based convenience tag points to the same build:
 
 ```bash
-docker pull ghcr.io/cyfarwydd-tian/agile-sonic-training:sha-c84d6db-training
+docker pull ghcr.io/cyfarwydd-tian/agile-sonic-training:sha-efd9c83-training
 ```
 
 The package currently permits anonymous manifest access. A GHCR login is not
 required for this public build. See [PARTNER_BUILD.md](PARTNER_BUILD.md) for the
 short partner handoff.
+
+This digest also passed a clean one-GPU RTX PRO 6000 Blackwell deployment and
+real two-update H20 PPO smoke. See
+[VASTAI_CLEAN_REBUILD_46693892.md](VASTAI_CLEAN_REBUILD_46693892.md) for the
+runtime evidence and remaining multi-GPU gates.
 
 ## What is installed
 
@@ -94,7 +98,7 @@ The default Conda environment is `agile-sonic`:
 | Hydra / OmegaConf | 1.3.2 / 2.3.0 |
 | TensorDict | 0.7.2 |
 | Gymnasium | 1.2.1 |
-| h5py | 3.13.0 staged for the next image; current verified digest needs the documented temporary overlay |
+| h5py | 3.13.0, installed and runtime-verified in the current image |
 | MuJoCo | 3.3.2 |
 | Open3D / VTK | 0.19.0 / 9.4.2 |
 | OpenCV | 4.11.0.86, headless build |
@@ -195,7 +199,7 @@ then run:
 
 ```bash
 scripts/run.sh \
-  --image ghcr.io/cyfarwydd-tian/agile-sonic-training@sha256:ee1d166e25c897ce50076efa2b99f0e79597a56ff450113aa560d11e2f5a95ed \
+  --image ghcr.io/cyfarwydd-tian/agile-sonic-training@sha256:6ab2d3aac46c74bb97cae40611262c16163ef1b3aae9cf503ce7e97e2f6b7b59 \
   --source /srv/agile-sonic/source \
   --datasets /srv/agile-sonic/datasets \
   --runs /srv/agile-sonic/runs \
@@ -318,6 +322,7 @@ scripts/launch-multigpu.sh       Accelerate DDP launcher
 .github/workflows/container.yml  GitHub Actions build and publication
 PARTNER_BUILD.md                 exact partner build handoff
 VastAI.md                        Vast.ai deployment notes
+VASTAI_CLEAN_REBUILD_46693892.md clean rebuild and real training audit
 ```
 
 Architecture and dependency decisions are documented in
