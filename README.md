@@ -94,6 +94,7 @@ The default Conda environment is `agile-sonic`:
 | Hydra / OmegaConf | 1.3.2 / 2.3.0 |
 | TensorDict | 0.7.2 |
 | Gymnasium | 1.2.1 |
+| h5py | 3.13.0 staged for the next image; current verified digest needs the documented temporary overlay |
 | MuJoCo | 3.3.2 |
 | Open3D / VTK | 0.19.0 / 9.4.2 |
 | OpenCV | 4.11.0.86, headless build |

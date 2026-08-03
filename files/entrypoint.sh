@@ -235,6 +235,7 @@ configure_runtime_cache_links() {
         /cache/pip \
         /cache/xdg \
         /cache/xdg/ov \
+        /cache/isaac-portable \
         /cache/huggingface \
         /cache/torch \
         /cache/torch_extensions \
@@ -265,6 +266,7 @@ configure_runtime_cache_links() {
         /cache/pip \
         /cache/xdg \
         /cache/xdg/ov \
+        /cache/isaac-portable \
         /cache/huggingface \
         /cache/torch \
         /cache/torch_extensions \

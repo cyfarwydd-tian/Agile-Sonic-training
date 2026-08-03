@@ -70,3 +70,93 @@ agile-sonic-nccl-smoke --gpu-count <visible-gpu-count>
 训练进程应由本仓库的多卡 launcher 和外部 manager 管理。不要仅依赖 SSH session、
 `nohup` 或容器可写层保存状态。实例销毁前确认所有 checkpoint、日志和 W&B offline
 目录已经同步完成。
+
+## Verified audit: instance 46687432
+
+The immutable `training` image was tested on 2026-08-03 on one NVIDIA RTX PRO
+6000 Blackwell GPU. Full evidence and the chronological record are in
+[`VASTAI_AUDIT_46687432.md`](VASTAI_AUDIT_46687432.md).
+
+Verified host/runtime combination:
+
+```text
+Host driver:       595.58.03
+GPU:               RTX PRO 6000 Blackwell Max-Q, compute capability 12.0
+Image CUDA/nvcc:   12.8 / 12.8.93
+PyTorch:           2.7.0+cu128, including sm_120
+cuDNN / NCCL:      9.7.1 / 2.26.2
+```
+
+PyTorch FP32/BF16 kernels, cuDNN forward/backward, a locally compiled `sm_120`
+CUDA extension, Isaac/Vulkan/PhysX and a real two-update SONIC H20 PPO smoke all
+passed. This host does not need its driver replaced for the current image.
+
+### Workarounds needed by the current immutable digest
+
+The tested digest does not contain `h5py` in its training environment. For a
+short-lived audit, install the pinned wheel into persistent cache without
+mutating Miniforge:
+
+```bash
+mkdir -p /cache/runtime-deps
+python -m pip install --no-deps \
+  --target /cache/runtime-deps \
+  h5py==3.13.0
+export PYTHONPATH="/cache/runtime-deps:${PYTHONPATH:-}"
+```
+
+The next image should bake this package into `agile-sonic`; do not make ad-hoc
+server-side pip installation the production deployment model.
+
+Isaac Sim's pip package otherwise selects read-only package-local Kit stores in
+Vast SSH mode. The current private SONIC trainer forwards this setting:
+
+```bash
+export SONIC_EXTRA_KIT_ARGS="--portable-root /cache/isaac-portable"
+mkdir -p /cache/isaac-portable
+```
+
+Raise the limits that the non-root session is allowed to raise:
+
+```bash
+ulimit -n 1048576
+ulimit -s 65536
+```
+
+The tested Vast container retained a hard memlock limit of only 8 MiB. A
+one-GPU smoke passed, but this is not acceptable evidence for production NCCL or
+GPUDirect. Multi-GPU deployment must request unlimited memlock from the
+container runtime/template.
+
+### Vast SSH launch-mode caveat
+
+Vast direct-SSH mode replaces the image entrypoint. Because this image does not
+bake shared SSH host keys and disables root login, the Vast on-start hook must:
+
+1. run `ssh-keygen -A`;
+2. copy Vast's injected authorization to
+   `/home/fangzhengtian/.ssh/authorized_keys` with user ownership and mode 0600;
+3. start `/usr/sbin/sshd`;
+4. preserve `ACCEPT_EULA=Y`, `PRIVACY_CONSENT=Y` and
+   `SONIC_ENV=agile-sonic` for login sessions.
+
+Do not bake host private keys into the image and do not enable SSH root login.
+A Vast-specific private template/on-start hook is the appropriate solution.
+
+### Source sync hygiene
+
+Exclude generated package metadata in addition to normal large/local trees:
+
+```text
+**/*.egg-info/
+**/*.dist-info/
+**/__pycache__/
+```
+
+`gear_sonic/pyproject.toml` currently declares `numpy==1.26.4`, while Isaac Sim
+5.1 pins `numpy==1.26.0`. SONIC runs correctly as mounted source, but transferring
+a generated `gear_sonic.egg-info` makes `pip check` report this conflict.
+
+The first H20 launch also downloaded about 190 MB of Kit extensions. Persist
+the user Omniverse extension store, allow first-start egress, or precache the
+exact training experience before using an offline server.

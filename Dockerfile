@@ -102,6 +102,7 @@ ENV PATH=${CONDA_PREFIX}/bin:${CONDA_DIR}/condabin:${PATH} \
     HF_HOME=/cache/huggingface \
     TORCH_HOME=/cache/torch \
     XDG_CACHE_HOME=/cache/xdg \
+    SONIC_EXTRA_KIT_ARGS="--portable-root /cache/isaac-portable" \
     WANDB_CACHE_DIR=/cache/wandb \
     WANDB_MODE=offline \
     NCCL_DEBUG=WARN \
@@ -201,12 +202,24 @@ RUN install -d -m 0755 /run/secrets \
       /cache/pip \
       /cache/torch \
       /cache/xdg \
+      /cache/isaac-portable \
       /cache/wandb \
       /cache/nvidia/ComputeCache \
       /cache/nvidia/GLCache \
       /cache/ov-data \
       /runs/nvidia-omniverse \
-      /runs/wandb
+      /runs/wandb \
+    && install -d -m 0755 -o "${CONTAINER_USER}" -g "$(id -gn "${CONTAINER_USER}")" \
+      "${CONTAINER_HOME}/.nv" \
+      "${CONTAINER_HOME}/.local/share/ov" \
+      "${CONTAINER_HOME}/.nvidia-omniverse" \
+    && ln -s /cache/nvidia/ComputeCache "${CONTAINER_HOME}/.nv/ComputeCache" \
+    && ln -s /cache/ov-data "${CONTAINER_HOME}/.local/share/ov/data" \
+    && ln -s /runs/nvidia-omniverse "${CONTAINER_HOME}/.nvidia-omniverse/logs" \
+    && chown -h "${CONTAINER_USER}:$(id -gn "${CONTAINER_USER}")" \
+      "${CONTAINER_HOME}/.nv/ComputeCache" \
+      "${CONTAINER_HOME}/.local/share/ov/data" \
+      "${CONTAINER_HOME}/.nvidia-omniverse/logs"
 
 # Runtime-only files are deliberately copied after the heavyweight training
 # dependency layer so launcher/entrypoint edits do not invalidate CUDA/Isaac.

@@ -16,7 +16,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--gpu-count", type=int, required=True)
     parser.add_argument(
         "--imports",
-        default="torch,accelerate,numpy,hydra,omegaconf,tensordict,wandb,isaacsim,isaaclab,gear_sonic.train_agent_trl",
+        default="torch,accelerate,numpy,h5py,hydra,omegaconf,tensordict,wandb,isaacsim,isaaclab,gear_sonic.train_agent_trl",
         help="Comma-separated Python modules that must import",
     )
     return parser.parse_args()

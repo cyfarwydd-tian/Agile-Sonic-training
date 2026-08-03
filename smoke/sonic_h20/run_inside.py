@@ -32,6 +32,11 @@ def run_streaming(command: list[str], log_path: Path) -> None:
 
 
 def main() -> int:
+    # Isaac Sim's pip distribution otherwise defaults portable Kit state below
+    # its read-only package directory. SONIC forwards this value to AppLauncher.
+    os.environ.setdefault(
+        "SONIC_EXTRA_KIT_ARGS", "--portable-root /cache/isaac-portable"
+    )
     source = Path("/workspace/sonic-training")
     entrypoint = source / "gear_sonic/train_agent_trl.py"
     fixture = Path("/datasets")

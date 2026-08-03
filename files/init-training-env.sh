@@ -232,7 +232,7 @@ case "${mode}" in
             > "${site_packages}/agile-sonic-source.pth"
         install -d -m 0755 /opt/agile-sonic/manifests
         "${training_python}" -c \
-            'import torch, isaaclab, open3d, transformers, trl, accelerate, tensordict, pink, pinocchio; import gear_sonic.train_agent_trl; from smpl_sim.smpllib import smpl_eval; print("training imports: ok")' \
+            'import torch, h5py, isaaclab, open3d, transformers, trl, accelerate, tensordict, pink, pinocchio; import gear_sonic.train_agent_trl; from smpl_sim.smpllib import smpl_eval; print("training imports: ok")' \
             > /opt/agile-sonic/manifests/agile-sonic.import-smoke.txt
 
         validate_distribution "${training_python}" torch \
