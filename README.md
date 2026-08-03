@@ -55,10 +55,9 @@ short partner handoff.
 
 This digest passed a clean two-GPU RTX PRO 6000 Blackwell deployment, automatic
 NCCL 2.26.5 activation, a 1 GiB NCCL stress gate and a real two-rank H20 PPO
-smoke. See [VASTAI_2GPU_AUDIT_46697258.md](VASTAI_2GPU_AUDIT_46697258.md) for
-the full evidence and production caveats. A concise comparison of all three
-test deployments is available in
-[VASTAI_TEST_SUMMARY.md](VASTAI_TEST_SUMMARY.md).
+smoke, all-module checkpoint verification and a same-topology resume. The test
+host used PCIe P2P without NVLink and driver `595.58.03`. Production must still
+set unlimited memlock and repeat these gates on its own driver and topology.
 
 ## What is installed
 
@@ -271,18 +270,6 @@ agile-sonic-launch --gpu-count <GPU_COUNT> -- <training arguments...>
 The first production phase uses Accelerate DDP on one multi-GPU host.
 DeepSpeed/FSDP and multi-node RDMA require separate validation.
 
-## Vast.ai validation
-
-Vast.ai is used as a pre-delivery GPU test platform. Select an instance with a
-compatible NVIDIA driver, enough GPUs, RAM and local NVMe, then execute the same
-host, preflight, NCCL, minimal-training and checkpoint gates described above.
-
-The image does not include private source or datasets, so they must be uploaded
-or cloned into persistent Vast.ai storage. Spot instances must continuously sync
-`/runs` to durable storage.
-
-See [`VastAI.md`](VastAI.md) for the platform-specific checklist.
-
 ## SSH and credentials
 
 Container SSH is optional. It has no default password, forbids root/password
@@ -297,7 +284,7 @@ order:
 3. Standard environment variables.
 
 Never put credentials in the Dockerfile, `.env`, Compose files committed to Git,
-GitHub Actions logs or public Vast.ai templates. See
+GitHub Actions logs or public marketplace templates. See
 [`compose.secrets.yaml.example`](compose.secrets.yaml.example).
 
 W&B defaults to offline mode. Set credentials and an explicit mode only when the
@@ -326,8 +313,6 @@ scripts/nccl-smoke.sh            single-node NCCL test
 scripts/launch-multigpu.sh       Accelerate DDP launcher
 .github/workflows/container.yml  GitHub Actions build and publication
 PARTNER_BUILD.md                 exact partner build handoff
-VastAI.md                        Vast.ai deployment notes
-VASTAI_CLEAN_REBUILD_46693892.md clean rebuild and real training audit
 ```
 
 Architecture and dependency decisions are documented in

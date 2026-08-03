@@ -16,3 +16,7 @@ id_rsa*
 id_ed25519*
 .netrc
 compose.secrets*.yaml
+
+# Local-only Vast.ai deployment and validation records
+VastAI.md
+VASTAI_*.md

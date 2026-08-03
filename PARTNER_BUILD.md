@@ -64,7 +64,4 @@ must still complete host-specific acceptance:
    server, then run a sustained all-GPU stability/load test.
 
 For full setup and credential-mounting instructions, see the project
-[`README.md`](README.md). The conditions, fixes and results from all three GPU
-deployments are summarized in
-[`VASTAI_TEST_SUMMARY.md`](VASTAI_TEST_SUMMARY.md); detailed two-GPU evidence is
-in [`VASTAI_2GPU_AUDIT_46697258.md`](VASTAI_2GPU_AUDIT_46697258.md).
+[`README.md`](README.md).
