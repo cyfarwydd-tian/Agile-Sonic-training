@@ -192,19 +192,31 @@ jobs:
       - name: Verify builder disk capacity
         shell: bash
         env:
-          MIN_FREE_BYTES: ${{ vars.DOCKER_MIN_FREE_BYTES || '250000000000' }}
+          CONFIGURED_MIN_FREE_BYTES: ${{ vars.DOCKER_MIN_FREE_BYTES }}
+          TARGET: ${{ matrix.target }}
         run: |
           set -Eeuo pipefail
-          [[ "${MIN_FREE_BYTES}" =~ ^[1-9][0-9]*$ ]] || {
+          if [[ -n "${CONFIGURED_MIN_FREE_BYTES}" ]]; then
+            min_free_bytes="${CONFIGURED_MIN_FREE_BYTES}"
+          elif [[ "${TARGET}" == "training" ]]; then
+            # The public hosted runner currently exposes about 112 GB after
+            # cleanup. Let the training build run so its real peak can be
+            # measured; keep larger targets on the existing 250 GB guard.
+            min_free_bytes=100000000000
+          else
+            min_free_bytes=250000000000
+          fi
+          [[ "${min_free_bytes}" =~ ^[1-9][0-9]*$ ]] || {
             echo "::error::DOCKER_MIN_FREE_BYTES must be a positive integer"
             exit 1
           }
           docker_root="$(docker info --format '{{.DockerRootDir}}')"
+          echo "AGILE_SONIC_DOCKER_ROOT=${docker_root}" >> "${GITHUB_ENV}"
           free_bytes="$(df --output=avail -B1 "${docker_root}" | tail -n 1)"
           free_bytes="${free_bytes//[[:space:]]/}"
-          echo "Docker root: ${docker_root}; available bytes: ${free_bytes}"
-          if (( free_bytes < MIN_FREE_BYTES )); then
-            echo "::error::Container publish needs at least ${MIN_FREE_BYTES} free bytes. Attach a large-disk self-hosted runner and set repository variable DOCKER_RUNNER to its label."
+          echo "Target: ${TARGET}; Docker root: ${docker_root}; available bytes: ${free_bytes}; required bytes: ${min_free_bytes}"
+          if (( free_bytes < min_free_bytes )); then
+            echo "::error::Container target ${TARGET} needs at least ${min_free_bytes} free bytes. Attach a large-disk self-hosted runner and set repository variable DOCKER_RUNNER to its label."
             exit 1
           fi
 
@@ -270,6 +282,30 @@ jobs:
           candidate="${{ env.IMAGE_NAME }}:candidate-${GITHUB_SHA::12}-${TARGET}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           echo "ref=${candidate}" >> "${GITHUB_OUTPUT}"
 
+      - name: Start builder disk monitor
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          set -Eeuo pipefail
+          : "${AGILE_SONIC_DOCKER_ROOT:?Docker root was not recorded}"
+          monitor_key="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${TARGET}"
+          monitor_log="${RUNNER_TEMP}/agile-sonic-disk-${monitor_key}.tsv"
+          monitor_pid_file="${RUNNER_TEMP}/agile-sonic-disk-${monitor_key}.pid"
+          : > "${monitor_log}"
+          nohup bash -c '
+            set -u
+            while true; do
+              free_bytes="$(df --output=avail -B1 "${AGILE_SONIC_DOCKER_ROOT}" | tail -n 1)"
+              free_bytes="${free_bytes//[[:space:]]/}"
+              printf "%s\t%s\n" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${free_bytes}"
+              sleep 15
+            done
+          ' >> "${monitor_log}" 2>&1 &
+          monitor_pid="$!"
+          echo "${monitor_pid}" > "${monitor_pid_file}"
+          echo "Disk monitor PID ${monitor_pid}; log ${monitor_log}"
+
       - name: Build and push candidate image
         id: build
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
@@ -287,6 +323,49 @@ jobs:
           cache-to: type=registry,ref=${{ env.IMAGE_NAME }}:buildcache-${{ matrix.target }},mode=max,image-manifest=true,oci-mediatypes=true
           provenance: mode=max
           sbom: true
+
+      - name: Report builder disk usage
+        if: always()
+        continue-on-error: true
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          set -Eeuo pipefail
+          monitor_key="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${TARGET}"
+          monitor_log="${RUNNER_TEMP}/agile-sonic-disk-${monitor_key}.tsv"
+          monitor_pid_file="${RUNNER_TEMP}/agile-sonic-disk-${monitor_key}.pid"
+          if [[ -s "${monitor_pid_file}" ]]; then
+            monitor_pid="$(<"${monitor_pid_file}")"
+            if [[ "${monitor_pid}" =~ ^[1-9][0-9]*$ ]]; then
+              kill "${monitor_pid}" 2>/dev/null || true
+            fi
+          fi
+
+          if [[ -s "${monitor_log}" ]]; then
+            initial_free_bytes="$(awk 'NR == 1 && $2 ~ /^[0-9]+$/ { print $2; exit }' "${monitor_log}")"
+            minimum_free_bytes="$(awk '$2 ~ /^[0-9]+$/ { if (minimum == "" || $2 < minimum) minimum = $2 } END { print minimum }' "${monitor_log}")"
+            final_free_bytes="$(awk '$2 ~ /^[0-9]+$/ { final = $2 } END { print final }' "${monitor_log}")"
+            if [[ "${initial_free_bytes}" =~ ^[0-9]+$ \
+                  && "${minimum_free_bytes}" =~ ^[0-9]+$ \
+                  && "${final_free_bytes}" =~ ^[0-9]+$ ]]; then
+              peak_consumed_bytes=$((initial_free_bytes - minimum_free_bytes))
+              retained_bytes=$((initial_free_bytes - final_free_bytes))
+              echo "Initial free bytes: ${initial_free_bytes}"
+              echo "Minimum free bytes: ${minimum_free_bytes}"
+              echo "Sampled peak consumed bytes: ${peak_consumed_bytes}"
+              echo "Final free bytes: ${final_free_bytes}"
+              echo "Retained bytes after build: ${retained_bytes}"
+            fi
+            echo "Recent disk samples:"
+            tail -n 20 "${monitor_log}"
+          else
+            echo "Disk monitor did not produce samples."
+          fi
+
+          df -h "${AGILE_SONIC_DOCKER_ROOT:-/}"
+          docker system df || true
+          docker buildx du || true
 
       - name: Enforce GHCR layer-size margin
         shell: bash
