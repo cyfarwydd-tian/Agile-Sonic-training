@@ -70,23 +70,33 @@ def assert_group_changed(
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("run_dir", type=Path)
+    parser.add_argument("--before-step", type=int, default=1)
+    parser.add_argument("--after-step", type=int, default=2)
+    parser.add_argument("--before-transitions", type=int, default=192)
+    parser.add_argument("--after-transitions", type=int, default=384)
+    parser.add_argument("--expected-config-iterations", type=int, default=2)
     args = parser.parse_args()
     run_dir = args.run_dir.resolve()
 
-    first = load_checkpoint(run_dir / "model_step_000001.pt")
-    second = load_checkpoint(run_dir / "model_step_000002.pt")
+    first = load_checkpoint(run_dir / f"model_step_{args.before_step:06d}.pt")
+    second = load_checkpoint(run_dir / f"model_step_{args.after_step:06d}.pt")
     for required in ("policy_state_dict", "value_state_dict", "optimizer_state_dict", "state"):
         if required not in first or required not in second:
             fail(f"checkpoint is missing required key: {required}")
 
     first_step = getattr(first["state"], "global_step", None)
     second_step = getattr(second["state"], "global_step", None)
-    if (first_step, second_step) != (1, 2):
-        fail(f"expected checkpoint steps (1, 2), got {(first_step, second_step)}")
+    expected_steps = (args.before_step, args.after_step)
+    if (first_step, second_step) != expected_steps:
+        fail(f"expected checkpoint steps {expected_steps}, got {(first_step, second_step)}")
     first_transitions = getattr(first["state"], "tot_timesteps", None)
     second_transitions = getattr(second["state"], "tot_timesteps", None)
-    if (first_transitions, second_transitions) != (192, 384):
-        fail(f"expected real rollout totals (192, 384), got {(first_transitions, second_transitions)}")
+    expected_transitions = (args.before_transitions, args.after_transitions)
+    if (first_transitions, second_transitions) != expected_transitions:
+        fail(
+            "expected real rollout totals "
+            f"{expected_transitions}, got {(first_transitions, second_transitions)}"
+        )
 
     policy_before = first["policy_state_dict"]
     policy_after = second["policy_state_dict"]
@@ -117,7 +127,7 @@ def main() -> int:
         "h20_teleop_latent:",
         "active_encoders:",
         "active_decoders:",
-        "num_learning_iterations: 2",
+        f"num_learning_iterations: {args.expected_config_iterations}",
         "num_steps_per_env: 8",
         "motion_file: /datasets/robot",
         "soma_motion_file: /datasets/soma",

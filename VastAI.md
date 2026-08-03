@@ -87,7 +87,7 @@ Host driver:       595.58.03
 GPU:               RTX PRO 6000 Blackwell Max-Q, compute capability 12.0
 Image CUDA/nvcc:   12.8 / 12.8.93
 PyTorch:           2.7.0+cu128, including sm_120
-cuDNN / NCCL:      9.7.1 / 2.26.2
+cuDNN / NCCL:      9.7.1 / 2.26.5 runtime (PyTorch metadata remains 2.26.2)
 ```
 
 Across the discovery and clean-rebuild audits, PyTorch FP32/BF16 kernels, cuDNN
@@ -99,7 +99,7 @@ does not need its driver replaced for the current image.
 ### Current image behavior
 
 Digest
-`sha256:6ab2d3aac46c74bb97cae40611262c16163ef1b3aae9cf503ce7e97e2f6b7b59`
+`sha256:e0e0a1b7f70983ce76cd65e3b0493f641fef445ea512aefcdf64ee6123076800`
 contains `h5py==3.13.0`; do not install a server-side overlay. It also defaults
 Kit to `--portable-root /cache/isaac-portable` and bakes the non-root
 ComputeCache, Omniverse data and log links. These settings remained effective
@@ -150,3 +150,18 @@ a generated `gear_sonic.egg-info` makes `pip check` report this conflict.
 The first H20 launch also downloaded about 190 MB of Kit extensions. Persist
 the user Omniverse extension store, allow first-start egress, or precache the
 exact training experience before using an offline server.
+
+## Two-GPU Blackwell validation: instance 46697258
+
+The two-GPU audit is recorded in
+[`VASTAI_2GPU_AUDIT_46697258.md`](VASTAI_2GPU_AUDIT_46697258.md). This exact
+RTX PRO 6000 Blackwell Workstation Edition host has no NVLink, but supports
+bidirectional CUDA peer access over PCIe at approximately 45–48 GiB/s.
+
+The previous NCCL 2.26.2 runtime failed on the local P2P/SHM paths. The final
+digest above automatically activates NCCL 2.26.5 for non-root training users;
+it passed a 50-iteration, 1 GiB two-rank collective at 31.76 GiB/s, a real
+two-rank BF16 SONIC/H20 PPO smoke, strict checkpoint verification and a
+same-topology resume. Do not deploy an earlier digest to a dual-Blackwell
+server. The tested Vast runtime still limited memlock to 8 MiB, so production
+must set unlimited memlock even though these tests passed.

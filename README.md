@@ -27,36 +27,36 @@ Those are mounted when the container starts.
 ## Current verified build
 
 The current verified artifact is the `training` target built from commit
-[`efd9c83`](https://github.com/cyfarwydd-tian/Agile-Sonic-training/commit/efd9c83465a0448dec855ad4c9088ac19a80cac5).
+[`4655f45`](https://github.com/cyfarwydd-tian/Agile-Sonic-training/commit/4655f4545db5b249349bed43a90cb7d7ba8f88ee).
 
-- [Successful GitHub Actions run](https://github.com/cyfarwydd-tian/Agile-Sonic-training/actions/runs/30804335746)
-- Build and publish time: 22 minutes 57 seconds
-- Cold-build sampled disk consumption: 56,978,497,536 bytes
-- Minimum remaining runner space: 55,222,448,128 bytes
-- Largest compressed layer: 4,102,248,768 bytes
+- [Successful GitHub Actions run](https://github.com/cyfarwydd-tian/Agile-Sonic-training/actions/runs/30813887535)
+- Build and publish time: 15 minutes 9 seconds
+- Sampled peak disk consumption: 54,868,590,592 bytes
+- Minimum remaining runner space: 57,332,219,904 bytes
+- Largest compressed layer: 4,420,997,816 bytes
 - GHCR layer check, tag promotion and provenance attestation: passed
 
 Pull the exact immutable image:
 
 ```bash
 docker pull \
-  ghcr.io/cyfarwydd-tian/agile-sonic-training@sha256:6ab2d3aac46c74bb97cae40611262c16163ef1b3aae9cf503ce7e97e2f6b7b59
+  ghcr.io/cyfarwydd-tian/agile-sonic-training@sha256:e0e0a1b7f70983ce76cd65e3b0493f641fef445ea512aefcdf64ee6123076800
 ```
 
 The commit-based convenience tag points to the same build:
 
 ```bash
-docker pull ghcr.io/cyfarwydd-tian/agile-sonic-training:sha-efd9c83-training
+docker pull ghcr.io/cyfarwydd-tian/agile-sonic-training:sha-4655f45-training
 ```
 
 The package currently permits anonymous manifest access. A GHCR login is not
 required for this public build. See [PARTNER_BUILD.md](PARTNER_BUILD.md) for the
 short partner handoff.
 
-This digest also passed a clean one-GPU RTX PRO 6000 Blackwell deployment and
-real two-update H20 PPO smoke. See
-[VASTAI_CLEAN_REBUILD_46693892.md](VASTAI_CLEAN_REBUILD_46693892.md) for the
-runtime evidence and remaining multi-GPU gates.
+This digest passed a clean two-GPU RTX PRO 6000 Blackwell deployment, automatic
+NCCL 2.26.5 activation, a 1 GiB NCCL stress gate and a real two-rank H20 PPO
+smoke. See [VASTAI_2GPU_AUDIT_46697258.md](VASTAI_2GPU_AUDIT_46697258.md) for
+the full evidence and production caveats.
 
 ## What is installed
 
@@ -147,7 +147,9 @@ The optional target manifests are under `files/requirements-*.txt` and
 For the RTX PRO 6000 Blackwell server, use:
 
 1. Ubuntu 22.04 or 24.04 x86_64.
-2. NVIDIA R580 driver, at least `580.65.06` or a validated newer R580 patch.
+2. NVIDIA Linux driver `580.65.06` or newer; validate each newer branch with
+   the same CUDA, Isaac, NCCL and real-training gates. Driver `595.58.03` is a
+   tested combination, not a required exact version.
 3. Docker Engine.
 4. NVIDIA Container Toolkit configured for Docker.
 5. Local NVMe for Docker layers and node-local caches.
@@ -200,7 +202,7 @@ then run:
 
 ```bash
 scripts/run.sh \
-  --image ghcr.io/cyfarwydd-tian/agile-sonic-training@sha256:6ab2d3aac46c74bb97cae40611262c16163ef1b3aae9cf503ce7e97e2f6b7b59 \
+  --image ghcr.io/cyfarwydd-tian/agile-sonic-training@sha256:e0e0a1b7f70983ce76cd65e3b0493f641fef445ea512aefcdf64ee6123076800 \
   --source /srv/agile-sonic/source \
   --datasets /srv/agile-sonic/datasets \
   --runs /srv/agile-sonic/runs \
