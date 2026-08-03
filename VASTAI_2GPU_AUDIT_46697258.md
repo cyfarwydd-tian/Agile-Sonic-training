@@ -222,5 +222,6 @@ a5929c4b9fb4424fe4a2a783701bd1282c69497967c7ae1c9ecd26fff533d25c  model_step_000
 ```
 
 The final fatal-log scan was clean and both GPUs returned to 2 MiB, 0%
-utilization and P8. The instance was stopped afterward to end active GPU
-charges. Its 400 GB disk remains allocated until the instance is destroyed.
+utilization and P8. The instance was stopped afterward, then permanently
+destroyed on 2026-08-03 with its 400 GB disk. Vast returned `instances: null`;
+no uploaded private source, cache, logs or checkpoints remain on the platform.

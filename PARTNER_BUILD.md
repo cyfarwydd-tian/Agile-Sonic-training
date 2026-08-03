@@ -64,4 +64,7 @@ must still complete host-specific acceptance:
    server, then run a sustained all-GPU stability/load test.
 
 For full setup and credential-mounting instructions, see the project
-[`README.md`](https://github.com/cyfarwydd-tian/Agile-Sonic-training/blob/4655f4545db5b249349bed43a90cb7d7ba8f88ee/README.md).
+[`README.md`](README.md). The conditions, fixes and results from all three GPU
+deployments are summarized in
+[`VASTAI_TEST_SUMMARY.md`](VASTAI_TEST_SUMMARY.md); detailed two-GPU evidence is
+in [`VASTAI_2GPU_AUDIT_46697258.md`](VASTAI_2GPU_AUDIT_46697258.md).

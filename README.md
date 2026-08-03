@@ -56,7 +56,9 @@ short partner handoff.
 This digest passed a clean two-GPU RTX PRO 6000 Blackwell deployment, automatic
 NCCL 2.26.5 activation, a 1 GiB NCCL stress gate and a real two-rank H20 PPO
 smoke. See [VASTAI_2GPU_AUDIT_46697258.md](VASTAI_2GPU_AUDIT_46697258.md) for
-the full evidence and production caveats.
+the full evidence and production caveats. A concise comparison of all three
+test deployments is available in
+[VASTAI_TEST_SUMMARY.md](VASTAI_TEST_SUMMARY.md).
 
 ## What is installed
 

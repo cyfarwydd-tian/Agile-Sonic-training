@@ -185,9 +185,9 @@ again reported driver `595.58.03`. The native runtime-state file remained
 absent, confirming that the Vast entrypoint caveat is stable rather than an
 intermittent image problem.
 
-The instance was stopped after validation to end active GPU charges. Its 400 GB
-disk remains allocated for inspection and continues to incur storage charges
-until the instance is destroyed.
+The instance was initially stopped after validation and was later permanently
+destroyed with its 400 GB disk. No source, cache, logs or checkpoints from this
+round remain on Vast.ai.
 
 ## Before production multi-GPU training
 

@@ -265,8 +265,9 @@ Status: **passed**
 - The restarted container still exposed the RTX PRO 6000 and driver 595.58.03.
 - After all remote checks completed, the instance was stopped. Vast confirmed
   `actual_status=exited`, `intended_status=stopped` and zero active GPU hourly
-  charge. The retained 400 GB instance disk continues to incur approximately
-  `$0.185185/hour` until the instance is destroyed.
+  charge. It was later permanently destroyed with its 400 GB disk before the
+  clean-rebuild round; no source, cache, logs or checkpoints from this round
+  remain on Vast.ai.
 
 ## Findings and remediation
 

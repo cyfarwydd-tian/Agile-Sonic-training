@@ -3,6 +3,9 @@
 Vast.ai 只作为可选 GPU 供应商。正式训练仍应遵守本仓库 README 中的镜像、
 挂载、preflight、NCCL 和 checkpoint 门禁。
 
+三轮 GPU 验证的条件、修复项和最终镜像统一记录在
+[`VASTAI_TEST_SUMMARY.md`](VASTAI_TEST_SUMMARY.md)。
+
 ## Before renting
 
 选择实例时至少核对：
@@ -165,3 +168,7 @@ two-rank BF16 SONIC/H20 PPO smoke, strict checkpoint verification and a
 same-topology resume. Do not deploy an earlier digest to a dual-Blackwell
 server. The tested Vast runtime still limited memlock to 8 MiB, so production
 must set unlimited memlock even though these tests passed.
+
+The test instance `46697258` and its 400 GB disk were permanently destroyed
+after validation. The two earlier test instances were also destroyed; no test
+source, cache, logs or checkpoints remain on Vast.ai.
