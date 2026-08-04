@@ -1,29 +1,86 @@
-#!/bin/bash
-set -e
+#!/usr/bin/env bash
+set -Eeuo pipefail
 
-# Change the mirror when needed, eg:
-# sed -i 's/http:\/\/archive.ubuntu.com\/ubuntu\//http:\/\/nz.archive.ubuntu.com\/ubuntu\//' /etc/apt/sources.list
+export DEBIAN_FRONTEND=noninteractive
 
-# Update apt cache
-apt update --fix-missing
-apt install -y apt-utils sudo
+apt-get -o Acquire::Retries=5 update
+apt-get -o Acquire::Retries=5 install -y --no-install-recommends \
+    apt-utils \
+    bash-completion \
+    build-essential \
+    ca-certificates \
+    cmake \
+    curl \
+    espeak \
+    ffmpeg \
+    git \
+    git-lfs \
+    gpg \
+    jq \
+    libavcodec-dev \
+    libavdevice-dev \
+    libavfilter-dev \
+    libavformat-dev \
+    libavutil-dev \
+    libdbus-1-3 \
+    libegl1 \
+    libegl1-mesa \
+    libegl1-mesa-dev \
+    libgl1 \
+    libgl1-mesa-dev \
+    libgl1-mesa-dri \
+    libgles2-mesa-dev \
+    libglib2.0-0 \
+    libglvnd-dev \
+    libglu1-mesa \
+    libgtk2.0-dev \
+    libncurses5-dev \
+    libsm6 \
+    libswresample-dev \
+    libswscale-dev \
+    libudev-dev \
+    libusb-1.0-0-dev \
+    libvulkan1 \
+    libx11-6 \
+    libx11-xcb1 \
+    libxcb-cursor0 \
+    libxcb-icccm4 \
+    libxcb-image0 \
+    libxcb-keysyms1 \
+    libxcb-randr0 \
+    libxcb-render-util0 \
+    libxcb-shape0 \
+    libxcb-xfixes0 \
+    libxcb-xinerama0 \
+    libxcb-xinput0 \
+    libxcb-xkb1 \
+    libxcursor1 \
+    libxext6 \
+    libxi6 \
+    libxinerama1 \
+    libxkbcommon-x11-0 \
+    libxrandr2 \
+    libxrender1 \
+    locales \
+    lsb-release \
+    mesa-utils \
+    net-tools \
+    openssh-client \
+    pkg-config \
+    rsync \
+    sudo \
+    tmux \
+    tzdata \
+    unzip \
+    vim-tiny \
+    vulkan-tools \
+    wget \
+    xauth \
+    xvfb
 
-# Configure the timezone when needed, eg:
-# ln -fs /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
-DEBIAN_FRONTEND=noninteractive apt install -y --no-install-recommends tzdata
-
-# Configure the locale
-# https://wiki.yoctoproject.org/wiki/TipsAndTricks/ResolvingLocaleIssues
-apt install -y locales-all locales
 locale-gen en_US.UTF-8
-update-locale LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8
+update-locale LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8
+git lfs install --system --skip-repo
 
-# Install some basic tools
-apt install -y curl unzip vim git git-lfs
-
-# Fix the keyrings issue of the nVidia CUDA container
-curl -fsSL https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/3bf863cc.pub | tee /etc/apt/keyrings/nvidia.pub > /dev/null
-sed -i 's|^deb https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64 /|deb [signed-by=/etc/apt/keyrings/nvidia.pub] https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64 /|g' /etc/apt/sources.list.d/cuda.list
-
-# Clean up
-apt clean && rm -rf /var/lib/apt/lists/*
+apt-get clean
+rm -rf /var/lib/apt/lists/*

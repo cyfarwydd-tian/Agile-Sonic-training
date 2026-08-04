@@ -1,3 +1,25 @@
 share/
 .devcontainer/
 *.code-workspace
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.env
+.env.*
+!.env.example
+.cache/
+secrets/
+*.pem
+*.key
+id_rsa*
+id_ed25519*
+.netrc
+compose.secrets*.yaml
+
+# Local-only Vast.ai deployment and validation records
+VastAI.md
+VASTAI_*.md
+
+# Local-only operator strategy notes
+docs/multi_gpu_training_strategy.md

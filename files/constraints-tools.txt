@@ -1,0 +1,11 @@
+# Non-Isaac simulation/data tools require newer numerical packages and are kept
+# out of the training interpreter to preserve Isaac Sim's exact dependencies.
+torch==2.6.0+cpu
+torchvision==0.21.0+cpu
+torchaudio==2.6.0+cpu
+numpy==1.26.4
+numba==0.61.0
+llvmlite==0.44.0
+mujoco==3.3.2
+opencv-python==4.11.0.86
+protobuf==5.29.5

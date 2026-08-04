@@ -1,0 +1,28 @@
+{
+  "fixture_version": 1,
+  "source_dataset": "data/motion_lib_h20_test/single_reference",
+  "source_motion": "neutral_walk_180_R_002__A075",
+  "frame_slice": [0, 120],
+  "fps": 30,
+  "duration_seconds": 4.0,
+  "robot": {
+    "sha256": "9a6df6b558219c9b76f5cf454f5e4175461cdba0947a58bdedf8e4bd82cc625d",
+    "decoded_bytes": 35497,
+    "features": {
+      "root_trans_offset": [120, 3],
+      "pose_aa": [120, 50, 3],
+      "dof": [120, 29],
+      "root_rot": [120, 4],
+      "smpl_joints": [120, 24, 3]
+    }
+  },
+  "soma": {
+    "sha256": "f2397a1fce89b0c06d89e80f95a8bbb2d6a917b0bb5b73b9fed912e0987c2dcc",
+    "decoded_bytes": 37766,
+    "features": {
+      "soma_joints": [120, 26, 3],
+      "soma_root_quat": [120, 4],
+      "soma_transl": [120, 3]
+    }
+  }
+}

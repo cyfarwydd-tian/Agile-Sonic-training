@@ -1,83 +1,336 @@
-StarVLA Training Container
-============================
+# Agile SONIC Training
 
-* Docker GPU Support
+Agile SONIC Training is the reproducible container and server-launch project for
+training the Agile H20 robot with NVIDIA GEAR-SONIC / Whole-Body Control.
 
-  GPU support must be enabled in Docker to correctly pass the GPU through to the container. This is accomplished by installing the NVIDIA Container Toolkit (formerly NVIDIA Docker). For more details, see the following:
+> **Hardware naming:** H20 is the robot model. It is not the training GPU. The
+> target training server uses NVIDIA RTX PRO 6000 Blackwell GPUs.
 
-  ```
-  sudo apt update
-  sudo apt install curl gnupg2
-  curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg \
-      && curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | \
-      sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
-      sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
-  sudo apt update
-  sudo apt install nvidia-container-toolkit  nvidia-container-toolkit-base  libnvidia-container-tools  libnvidia-container1
-  sudo nvidia-ctk runtime configure --runtime=docker
-  sudo systemctl restart docker
-  ```
+The project keeps the useful infrastructure pattern from the original StarVLA
+container while replacing its Python and ML environment with the SONIC stack:
 
-* Build
+```text
+CUDA base image
+  -> Linux packages and non-root user
+  -> key-only SSH
+  -> AWS CLI and Alibaba Cloud CLI
+  -> Miniforge
+  -> SONIC training environments
+  -> runtime entrypoint and UID/GID remapping
+```
 
-  We strongly recommend adding your user to the `docker` group.
+This public repository contains the container environment, CI/CD workflow and
+server scripts. It intentionally does **not** contain the private
+`sonic-training` checkout, datasets, model assets, checkpoints or credentials.
+Those are mounted when the container starts.
 
-  `sudo usermod -aGdocker $USER`
+## Current verified build
 
-  After doing so, you can run all the Docker commands without using `sudo`.
+The current verified artifact is the `training` target built from commit
+[`4655f45`](https://github.com/cyfarwydd-tian/Agile-Sonic-training/commit/4655f4545db5b249349bed43a90cb7d7ba8f88ee).
 
-  `docker buildx . -t <Container Tag>`
+- [Successful GitHub Actions run](https://github.com/cyfarwydd-tian/Agile-Sonic-training/actions/runs/30813887535)
+- [Pinned publish workflow](https://github.com/cyfarwydd-tian/Agile-Sonic-training/blob/4655f4545db5b249349bed43a90cb7d7ba8f88ee/.github/workflows/container.yml#L192)
+- Image target: `training`
+- Build and publish time: 15 minutes 9 seconds
+- Sampled peak disk consumption: 54,868,590,592 bytes
+- Minimum remaining runner space: 57,332,219,904 bytes
+- Largest compressed layer: 4,420,997,816 bytes
+- GHCR layer check and release-tag promotion: passed
+- [Provenance attestation](https://github.com/cyfarwydd-tian/Agile-Sonic-training/attestations/38569052): passed
 
-* Run
+Pull the exact immutable image:
 
-  Typically, you need to mount your training code and data as a volume. Assuming they are located in the `<Share Directory>`, you can mount them using the `-v` option in the `docker run` command:
+```bash
+docker pull \
+  ghcr.io/cyfarwydd-tian/agile-sonic-training@sha256:e0e0a1b7f70983ce76cd65e3b0493f641fef445ea512aefcdf64ee6123076800
+```
 
-  `docker run -v <Share Directory>:/home/worker/share -it --rm --gpus all <Container Tag>`
+The commit-based convenience tag points to the same build:
 
-  The password for the `worker` user is `worker`, in case you need to run commands with `sudo`.
+```bash
+docker pull ghcr.io/cyfarwydd-tian/agile-sonic-training:sha-4655f45-training
+```
 
-* Switch To the Traning Environment
+The package currently permits anonymous manifest access. A GHCR login is not
+required for this public build.
 
-  `conda activate startvla`
+This digest passed a clean two-GPU RTX PRO 6000 Blackwell deployment, automatic
+NCCL 2.26.5 activation, a 1 GiB NCCL stress gate and a real two-rank H20 PPO
+smoke, all-module checkpoint verification and a same-topology resume. The test
+host used PCIe P2P without NVLink and driver `595.58.03`. Production must still
+set unlimited memlock and repeat these gates on its own driver and topology.
 
-* Remote Connection
+## What is installed
 
-  This container includes a built-in SSH server. To enable SSH access, expose the SSH port by adding a port-forwarding option to your `docker run` command, and provide an `SSH_USER_PUBLIC_KEY` environment variable. The entrypoint script will automatically install the key inside the container.
+### Base system and operations tooling
 
-  ```
-  docker run \
-    -e SSH_USER_PUBLIC_KEY="<ssh-rsa AAA...>" \
-    -p <Port number>:22 \
-    -v <Share Directory>:/home/worker/share \
-    -it --rm --gpus all <Container Tag>
-  ```
+| Component | Installed version or purpose |
+| --- | --- |
+| Base OS | Ubuntu 22.04 |
+| CUDA image | CUDA 12.8.1 + cuDNN development image |
+| Architecture | Linux `amd64` / `x86_64` |
+| Container user | `fangzhengtian`; runtime UID/GID can match the host |
+| Miniforge | 26.3.2-2 under `/opt/miniforge3` |
+| AWS CLI | 2.36.13 |
+| Alibaba Cloud CLI | 3.3.18 |
+| SSH | OpenSSH server, public-key only, disabled unless a key is supplied |
+| Build tools | GCC/G++, CMake, pkg-config, Ninja, Git and Git LFS |
+| Media and graphics | FFmpeg, OpenGL/EGL, Vulkan, X11, Xvfb and GTK libraries |
+| Operations | curl, wget, rsync, tmux, jq, sudo and a minimal Vim |
 
-  On Linux, you can generate an SSH key pair using ssh-keygen.
+The image also includes USB/udev and common rendering libraries required by
+robotics, camera and headless Isaac workflows. The exact apt package list is in
+[`files/init-dep.sh`](files/init-dep.sh).
 
-  ```
-  ssh-keygen -t ed25519 -f <Key Storage Path>/<Key Name> -C "<Some Comment>"
-  ```
+### Verified `training` Python environment
 
-  The content of `SSH_USER_PUBLIC_KEY` can be found in the file `<Key Storage Path>/<Key Name>.pub`, and the file `<Key Storage Path>/<Key Name>` is the corresponding private key for the SSH client. You can connect to the container over SSH using `<Docker Host IP>:<Port number>` and username `worker`.
+The default Conda environment is `agile-sonic`:
 
-  ```
-  ssh -i <Key Storage Path>/<Key Name> -p 2222 worker@<Docker Host IP>
-  ```
+| Component | Version |
+| --- | --- |
+| Python | 3.11 |
+| PyTorch | 2.7.0 + CUDA 12.8 |
+| TorchVision | 0.22.0 + CUDA 12.8 |
+| TorchAudio | 2.7.0 + CUDA 12.8 |
+| NCCL runtime | 2.26.5 compatibility patch over PyTorch's pinned 2.26.2 wheel |
+| Triton | 3.3.0 |
+| Isaac Sim | 5.1.0, including Kit/SDK/Physics extension caches |
+| Isaac Lab | 2.3.2, pinned source revision |
+| Hugging Face Accelerate | 1.14.0 |
+| Transformers / TRL | 4.57.6 / 0.28.0 |
+| Hydra / OmegaConf | 1.3.2 / 2.3.0 |
+| TensorDict | 0.7.2 |
+| Gymnasium | 1.2.1 |
+| h5py | 3.13.0, installed and runtime-verified in the current image |
+| MuJoCo | 3.3.2 |
+| Open3D / VTK | 0.19.0 / 9.4.2 |
+| OpenCV | 4.11.0.86, headless build |
+| W&B / TensorBoard | 0.23.1 / 2.20.0 |
 
-* Using Dev Containers in VSCode
+The training image also installs the pinned public sources used by the runtime:
 
-  You can open the project inside a container by searching for “Dev Containers: Open Folder in Container” from the Command Palette (Ctrl + Shift + P) and selecting the root of the Git repository.
+- NVIDIA `GR00T-WholeBodyControl`
+- Isaac Lab
+- SMPLSim
+- SMPL-X
 
-  Note: the container may take some time to build the first time it is opened
+The complete direct package list and hard compatibility pins are in:
 
-  By default, Dev Containers override the container’s entrypoint. Each time you open a terminal in VS Code, it will start as the root user. If you prefer to use the `worker` user instead, you can set "remoteUser" in `.devcontainer/devcontainer.json` to enforce this.
+- [`files/requirements-training.txt`](files/requirements-training.txt)
+- [`files/constraints.txt`](files/constraints.txt)
+- [`files/agile-sonic.yml`](files/agile-sonic.yml)
 
-  To pass all GPUs to the container, include a runArgs section in your `.devcontainer/devcontainer.json` file and set it to `["--gpus", "all"]`.
+Build-time import checks, `pip check`, `pip freeze`, apt packages, toolchain
+versions and source revisions are recorded inside the image under
+`/opt/agile-sonic/manifests/`.
 
-  You can also choose the Python executable from the created conda environment by searching for “Python: Select Interpreter” in the Command Palette.
+### Image targets
 
-  If you are using VS Code on Windows but connecting docker containers on WSL, you need to open the folder in WSL before open it again in Dev Containers.
+| Target | Contents | Current status |
+| --- | --- | --- |
+| `training` | CUDA, PyTorch, Isaac Sim/Lab and SONIC multi-GPU RL stack | Built and published successfully |
+| `tensorrt` | `training` plus TensorRT 10.13.3.9, CUDA Python 12.8 and ONNX Runtime 1.27 | Defined; requires a separate publish/runtime validation |
+| `full` | `tensorrt` plus isolated tools, data and VLA inference environments | Defined; requires a larger publish/runtime validation |
 
-* AWS / ALICLOUD CLI
+The `full` target keeps incompatible workloads in separate environments:
 
-  This container includes the AWS and ALICLOUD CLI, which you can use to synchronize training data from Amazon S3 or Alicloud OSS. You can configure it interactively as needed, or supply credentials and the AWS/ALICLOUD region, via environment variables by passing `AWS_KEY_ID` / `ALICLOUD_KEY_ID`, `AWS_KEY` / `ALICLOUD_KEY`, and `AWS_REGION` / `ALICLOUD_REGION` to your `docker run` command.
+| `SONIC_ENV` | Core environment | Purpose |
+| --- | --- | --- |
+| `training` / `agile-sonic` | Python 3.11, CUDA Torch 2.7 | Isaac/SONIC RL training |
+| `tools` / `agile-sonic-tools` | Python 3.10, CPU Torch 2.6 | MuJoCo, teleoperation, cameras, RoboSuite and CycloneDDS |
+| `data` / `agile-sonic-data` | Python 3.10, CPU Torch 2.6 | LeRobot data collection and conversion |
+| `inference` / `agile-sonic-inference` | Python 3.12, CUDA Torch 2.9 | Isaac-GR00T VLA inference; experimental |
+
+The optional target manifests are under `files/requirements-*.txt` and
+`files/agile-sonic-*.yml`.
+
+## Host requirements
+
+For the RTX PRO 6000 Blackwell server, use:
+
+1. Ubuntu 22.04 or 24.04 x86_64.
+2. NVIDIA Linux driver `580.65.06` or newer; validate each newer branch with
+   the same CUDA, Isaac, NCCL and real-training gates. Driver `595.58.03` is a
+   tested combination, not a required exact version.
+3. Docker Engine.
+4. NVIDIA Container Toolkit configured for Docker.
+5. Local NVMe for Docker layers and node-local caches.
+6. Sufficient RAM, CPU cores and PCIe bandwidth for the selected GPU count.
+
+The host does not need a separate CUDA Toolkit installation; the CUDA user-space
+stack is in the image.
+
+Validate the host before using this project:
+
+```bash
+nvidia-smi
+nvidia-smi topo -m
+nvidia-smi topo -p2p p
+nvidia-ctk --version
+
+docker run --rm --gpus all \
+  nvidia/cuda:12.8.1-base-ubuntu22.04 \
+  nvidia-smi
+```
+
+## Server directory layout
+
+Keep source, datasets, outputs and caches separate:
+
+```text
+/srv/agile-sonic/
+├── source/       # private sonic-training checkout
+├── datasets/     # training data, read-only by default
+├── runs/         # checkpoints, Hydra logs and W&B offline runs
+└── cache/        # Isaac, Hugging Face, Torch and NVIDIA caches
+```
+
+If the private project uses Git LFS, materialize all objects before launching:
+
+```bash
+cd /srv/agile-sonic/source
+git lfs install
+git lfs pull
+git lfs ls-files
+```
+
+The second column of `git lfs ls-files` must be `*`; `-` means the working tree
+still contains pointer text.
+
+## Start the training container
+
+Clone this repository on the server so the validated launcher is available,
+then run:
+
+```bash
+scripts/run.sh \
+  --image ghcr.io/cyfarwydd-tian/agile-sonic-training@sha256:e0e0a1b7f70983ce76cd65e3b0493f641fef445ea512aefcdf64ee6123076800 \
+  --source /srv/agile-sonic/source \
+  --datasets /srv/agile-sonic/datasets \
+  --runs /srv/agile-sonic/runs \
+  --cache /srv/agile-sonic/cache \
+  --gpu-request all \
+  --gpu-count <GPU_COUNT> \
+  --ssh-port 0 \
+  --detach
+```
+
+Do not replace this with a minimal `docker run --gpus all`. The launcher also
+configures host IPC, unlimited memlock, file descriptor and stack limits, GPU
+selection, log rotation, persistent paths and runtime UID/GID mapping.
+
+To re-enter the container:
+
+```bash
+docker exec --user fangzhengtian -it agile-sonic-training bash -l
+```
+
+## Required runtime gates
+
+Run these checks before any production job:
+
+```bash
+agile-sonic-preflight --strict
+agile-sonic-nccl-smoke --gpu-count <GPU_COUNT>
+```
+
+They validate:
+
+- Python, PyTorch, CUDA, Isaac Sim/Lab and important imports.
+- Python dependency consistency.
+- GPU visibility and device properties.
+- source, dataset, cache and run mounts.
+- atomic checkpoint-directory writes.
+- single-node multi-GPU NCCL all-reduce.
+
+Then run the self-contained SONIC training smoke test on one GPU:
+
+```bash
+scripts/sonic-training-smoke.sh \
+  --source /srv/agile-sonic/source \
+  --runs /srv/agile-sonic/runs \
+  --cache /srv/agile-sonic/cache \
+  --gpu 0
+```
+
+This is a real two-update training test, not an import check. It packages a
+paired 120-frame H20 robot/SOMA fixture, runs Isaac rollouts and PPO, and fails
+unless every active encoder, decoder, critic and optimizer path changes between
+the two checkpoints. See [`smoke/sonic_h20/README.md`](smoke/sonic_h20/README.md)
+for its exact coverage. The `h20` name refers to the Agile H20 robot.
+
+Before production training, also verify checkpoint save/restore and complete at
+least a 15–30 minute all-GPU stability test. Pin the private project revision:
+
+```bash
+SONIC_EXPECTED_REVISION=<40-character-commit-sha> \
+SONIC_REQUIRE_CLEAN=1 \
+agile-sonic-launch --gpu-count <GPU_COUNT> -- <training arguments...>
+```
+
+The first production phase uses Accelerate DDP on one multi-GPU host.
+DeepSpeed/FSDP and multi-node RDMA require separate validation.
+
+## Partner deployment checklist
+
+Use the immutable digest above, then complete these host-specific gates before
+starting a production run:
+
+1. Install a CUDA 12.8-compatible NVIDIA driver, Docker Engine and NVIDIA
+   Container Toolkit. Driver `595.58.03` is the verified RTX PRO 6000
+   Blackwell combination, not an exact requirement.
+2. Mount the pinned private `sonic-training` checkout, datasets, `/runs` and
+   `/cache`; none of them are included in the public image.
+3. Start through `scripts/run.sh` or `compose.yaml` so host IPC, unlimited
+   memlock, resource limits, GPU selection and persistent paths are applied.
+4. Run strict preflight, NCCL, the real two-update H20 smoke and checkpoint
+   resume on the production GPU topology.
+5. Complete a sustained all-GPU stability/load test before the full job.
+
+## SSH and credentials
+
+Container SSH is optional. It has no default password, forbids root/password
+login and starts only when an authorized public key is supplied. Prefer host SSH
+plus `docker exec`; do not expose container port 22 unless required.
+
+AWS and Alibaba Cloud CLIs are installed, but credentials are not. Prefer, in
+order:
+
+1. Cloud instance roles or short-lived STS credentials.
+2. Read-only mounted credential files or Docker secrets.
+3. Standard environment variables.
+
+Never put credentials in the Dockerfile, `.env`, Compose files committed to Git,
+GitHub Actions logs or public marketplace templates. See
+[`compose.secrets.yaml.example`](compose.secrets.yaml.example).
+
+W&B defaults to offline mode. Set credentials and an explicit mode only when the
+server is allowed to communicate with W&B.
+
+## CI/CD
+
+The workflow in [`.github/workflows/container.yml`](.github/workflows/container.yml)
+performs source validation, Buildx checks, registry-cache import/export, candidate
+image publication, compressed-layer enforcement, release-tag promotion, SBOM and
+provenance attestation.
+
+Pushes to `agent/**` currently publish the `training` target. Other targets retain
+a larger disk guard and should be published only after their own capacity and
+runtime validation.
+
+## Repository layout
+
+```text
+Dockerfile                       multi-stage image definition
+compose.yaml                     single-node multi-GPU runtime configuration
+files/                           pinned environments and image setup scripts
+scripts/run.sh                   validated Docker launcher
+scripts/preflight.sh             runtime dependency and mount checks
+scripts/nccl-smoke.sh            single-node NCCL test
+scripts/launch-multigpu.sh       Accelerate DDP launcher
+.github/workflows/container.yml  GitHub Actions build and publication
+```
+
+Architecture and dependency decisions are documented in
+[`docs/architecture.md`](docs/architecture.md).

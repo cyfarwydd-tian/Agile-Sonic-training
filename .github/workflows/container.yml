@@ -1,0 +1,423 @@
+name: Validate and publish container
+
+on:
+  pull_request:
+    branches:
+      - "**"
+  push:
+    branches:
+      - "**"
+    tags:
+      - "v[0-9]*.[0-9]*.[0-9]*"
+      - "[0-9]*.[0-9]*.[0-9]*"
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Push images to GHCR
+        required: false
+        type: boolean
+        default: false
+      targets:
+        description: Comma-separated targets (training,tensorrt,full)
+        required: false
+        type: string
+        default: training
+
+concurrency:
+  group: container-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/agile-sonic-training
+
+jobs:
+  validate:
+    name: Validate sources
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    outputs:
+      publish: ${{ steps.plan.outputs.publish }}
+      matrix: ${{ steps.plan.outputs.matrix }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Validate shell scripts
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          mapfile -d '' scripts_to_check < <(
+            find files scripts -type f -name '*.sh' -print0 | sort -z
+          )
+          bash -n "${scripts_to_check[@]}"
+          if command -v shellcheck >/dev/null 2>&1; then
+            mapfile -d '' runtime_scripts < <(
+              find files scripts -type f -name '*.sh' -print0 | sort -z
+            )
+            shellcheck "${runtime_scripts[@]}"
+          else
+            echo "::warning::shellcheck is not installed on this runner; bash -n completed"
+          fi
+
+      - name: Validate Compose configuration
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          touch /tmp/ssh_authorized_keys /tmp/aws_credentials /tmp/aws_config /tmp/alicloud_config
+          env SONIC_SOURCE=/tmp/sonic-source DATASETS_DIR=/tmp/sonic-datasets \
+            docker compose -f compose.yaml config --quiet
+          env SONIC_SOURCE=/tmp/sonic-source DATASETS_DIR=/tmp/sonic-datasets \
+            SSH_AUTHORIZED_KEYS_FILE=/tmp/ssh_authorized_keys \
+            AWS_SHARED_CREDENTIALS_FILE=/tmp/aws_credentials \
+            AWS_CONFIG_FILE=/tmp/aws_config \
+            ALIBABA_CLOUD_CONFIG_FILE=/tmp/alicloud_config \
+            docker compose \
+              -f compose.yaml \
+              -f compose.secrets.yaml.example \
+              config --quiet
+
+      - name: Validate Python helper syntax
+        shell: bash
+        run: >-
+          python3 -B -c 'from pathlib import Path;
+          [compile(path.read_text(), str(path), "exec")
+          for path in Path("scripts").glob("*.py")]'
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+
+      - name: Validate Docker targets
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          for target in training tensorrt full; do
+            docker buildx build --check --target "${target}" .
+          done
+
+      - name: Select publication plan
+        id: plan
+        shell: bash
+        env:
+          REQUESTED_TARGETS: ${{ inputs.targets || 'training' }}
+          MANUAL_PUBLISH: ${{ inputs.publish || false }}
+        run: |
+          set -Eeuo pipefail
+          publish=false
+          matrix='{"target":["training"]}'
+
+          case "${GITHUB_EVENT_NAME}:${GITHUB_REF}" in
+            push:refs/heads/main)
+              publish=true
+              matrix='{"target":["training","tensorrt","full"]}'
+              ;;
+            push:refs/heads/agent/*)
+              publish=true
+              ;;
+            push:refs/tags/*)
+              tag="${GITHUB_REF#refs/tags/}"
+              number='(0|[1-9][0-9]*)'
+              prerelease='(0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)'
+              semver="^v?${number}\\.${number}\\.${number}(-${prerelease}(\\.${prerelease})*)?(\\+[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?$"
+              if [[ ! "${tag}" =~ ${semver} ]]; then
+                echo "::error::Tag '${tag}' is not valid semantic version syntax"
+                exit 1
+              fi
+              publish=true
+              matrix='{"target":["training","tensorrt","full"]}'
+              ;;
+            workflow_dispatch:*)
+              if [[ "${MANUAL_PUBLISH}" == "true" ]]; then
+                publish=true
+              fi
+              IFS=',' read -r -a requested <<< "${REQUESTED_TARGETS}"
+              json_targets=()
+              for target in "${requested[@]}"; do
+                target="${target//[[:space:]]/}"
+                case "${target}" in
+                  training|tensorrt|full)
+                    json_targets+=("\"${target}\"")
+                    ;;
+                  *)
+                    echo "::error::Unsupported target '${target}'"
+                    exit 1
+                    ;;
+                esac
+              done
+              if (( ${#json_targets[@]} == 0 )); then
+                echo "::error::At least one build target is required"
+                exit 1
+              fi
+              joined="$(IFS=,; echo "${json_targets[*]}")"
+              matrix="{\"target\":[${joined}]}"
+              ;;
+          esac
+
+          echo "publish=${publish}" >> "${GITHUB_OUTPUT}"
+          echo "matrix=${matrix}" >> "${GITHUB_OUTPUT}"
+          echo "Publication: ${publish}; build matrix: ${matrix}"
+
+  publish:
+    name: Publish ${{ matrix.target }}
+    needs: validate
+    if: github.event_name != 'pull_request' && needs.validate.outputs.publish == 'true'
+    runs-on: ${{ vars.DOCKER_RUNNER || 'ubuntu-24.04' }}
+    timeout-minutes: 360
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.validate.outputs.matrix) }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Reclaim hosted-runner disk space
+        if: runner.environment == 'github-hosted'
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          echo "::warning::Standard hosted runners have limited disk. Configure repository variable DOCKER_RUNNER to a large-disk self-hosted runner for full Isaac images."
+          docker system prune --all --force --volumes || true
+          sudo apt-get clean
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc
+          df -h /
+
+      - name: Verify builder disk capacity
+        shell: bash
+        env:
+          CONFIGURED_MIN_FREE_BYTES: ${{ vars.DOCKER_MIN_FREE_BYTES }}
+          TARGET: ${{ matrix.target }}
+        run: |
+          set -Eeuo pipefail
+          if [[ -n "${CONFIGURED_MIN_FREE_BYTES}" ]]; then
+            min_free_bytes="${CONFIGURED_MIN_FREE_BYTES}"
+          elif [[ "${TARGET}" == "training" ]]; then
+            # The public hosted runner currently exposes about 112 GB after
+            # cleanup. Let the training build run so its real peak can be
+            # measured; keep larger targets on the existing 250 GB guard.
+            min_free_bytes=100000000000
+          else
+            min_free_bytes=250000000000
+          fi
+          [[ "${min_free_bytes}" =~ ^[1-9][0-9]*$ ]] || {
+            echo "::error::DOCKER_MIN_FREE_BYTES must be a positive integer"
+            exit 1
+          }
+          docker_root="$(docker info --format '{{.DockerRootDir}}')"
+          echo "AGILE_SONIC_DOCKER_ROOT=${docker_root}" >> "${GITHUB_ENV}"
+          free_bytes="$(df --output=avail -B1 "${docker_root}" | tail -n 1)"
+          free_bytes="${free_bytes//[[:space:]]/}"
+          echo "Target: ${TARGET}; Docker root: ${docker_root}; available bytes: ${free_bytes}; required bytes: ${min_free_bytes}"
+          if (( free_bytes < min_free_bytes )); then
+            echo "::error::Container target ${TARGET} needs at least ${min_free_bytes} free bytes. Attach a large-disk self-hosted runner and set repository variable DOCKER_RUNNER to its label."
+            exit 1
+          fi
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+
+      - name: Log in to GHCR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate image metadata
+        id: meta
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
+        with:
+          images: ${{ env.IMAGE_NAME }}
+          flavor: |
+            latest=false
+          tags: |
+            type=ref,event=branch,suffix=-${{ matrix.target }}
+            type=sha,format=short,suffix=-${{ matrix.target }}
+            type=semver,pattern={{version}},suffix=-${{ matrix.target }}
+            type=semver,pattern={{major}}.{{minor}},suffix=-${{ matrix.target }}
+            type=raw,value=latest-${{ matrix.target }},enable=${{ github.ref == 'refs/heads/main' }}
+            type=raw,value=latest,enable=${{ matrix.target == 'full' && github.ref == 'refs/heads/main' }}
+            type=ref,event=branch,enable=${{ matrix.target == 'full' && github.ref == 'refs/heads/main' }}
+            type=sha,format=short,enable=${{ matrix.target == 'full' && github.ref == 'refs/heads/main' }}
+            type=semver,pattern={{version}},enable=${{ matrix.target == 'full' }}
+            type=semver,pattern={{major}}.{{minor}},enable=${{ matrix.target == 'full' }}
+          labels: |
+            org.opencontainers.image.title=Agile Sonic Training (${{ matrix.target }})
+            org.opencontainers.image.description=Version-pinned SONIC multi-GPU training environment
+            org.opencontainers.image.vendor=${{ github.repository_owner }}
+
+      - name: Select layered registry caches
+        id: cache
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          set -Eeuo pipefail
+          {
+            echo 'from<<EOF'
+            echo 'type=registry,ref=${{ env.IMAGE_NAME }}:buildcache-training'
+            if [[ "${TARGET}" == "tensorrt" || "${TARGET}" == "full" ]]; then
+              echo 'type=registry,ref=${{ env.IMAGE_NAME }}:buildcache-tensorrt'
+            fi
+            if [[ "${TARGET}" == "full" ]]; then
+              echo 'type=registry,ref=${{ env.IMAGE_NAME }}:buildcache-full'
+            fi
+            echo 'EOF'
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Select immutable candidate tag
+        id: candidate
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          set -Eeuo pipefail
+          candidate="${{ env.IMAGE_NAME }}:candidate-${GITHUB_SHA::12}-${TARGET}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          echo "ref=${candidate}" >> "${GITHUB_OUTPUT}"
+
+      - name: Start builder disk monitor
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          set -Eeuo pipefail
+          : "${AGILE_SONIC_DOCKER_ROOT:?Docker root was not recorded}"
+          monitor_key="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${TARGET}"
+          monitor_log="${RUNNER_TEMP}/agile-sonic-disk-${monitor_key}.tsv"
+          monitor_pid_file="${RUNNER_TEMP}/agile-sonic-disk-${monitor_key}.pid"
+          : > "${monitor_log}"
+          nohup bash -c '
+            set -u
+            while true; do
+              free_bytes="$(df --output=avail -B1 "${AGILE_SONIC_DOCKER_ROOT}" | tail -n 1)"
+              free_bytes="${free_bytes//[[:space:]]/}"
+              printf "%s\t%s\n" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${free_bytes}"
+              sleep 15
+            done
+          ' >> "${monitor_log}" 2>&1 &
+          monitor_pid="$!"
+          echo "${monitor_pid}" > "${monitor_pid_file}"
+          echo "Disk monitor PID ${monitor_pid}; log ${monitor_log}"
+
+      - name: Build and push candidate image
+        id: build
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: .
+          target: ${{ matrix.target }}
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.candidate.outputs.ref }}
+          labels: ${{ steps.meta.outputs.labels }}
+          annotations: ${{ steps.meta.outputs.annotations }}
+          build-args: |
+            IMAGE_REVISION=${{ github.sha }}
+          cache-from: ${{ steps.cache.outputs.from }}
+          cache-to: type=registry,ref=${{ env.IMAGE_NAME }}:buildcache-${{ matrix.target }},mode=max,image-manifest=true,oci-mediatypes=true
+          provenance: mode=max
+          sbom: true
+
+      - name: Report builder disk usage
+        if: always()
+        continue-on-error: true
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          set -Eeuo pipefail
+          monitor_key="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${TARGET}"
+          monitor_log="${RUNNER_TEMP}/agile-sonic-disk-${monitor_key}.tsv"
+          monitor_pid_file="${RUNNER_TEMP}/agile-sonic-disk-${monitor_key}.pid"
+          if [[ -s "${monitor_pid_file}" ]]; then
+            monitor_pid="$(<"${monitor_pid_file}")"
+            if [[ "${monitor_pid}" =~ ^[1-9][0-9]*$ ]]; then
+              kill "${monitor_pid}" 2>/dev/null || true
+            fi
+          fi
+
+          if [[ -s "${monitor_log}" ]]; then
+            initial_free_bytes="$(awk 'NR == 1 && $2 ~ /^[0-9]+$/ { print $2; exit }' "${monitor_log}")"
+            minimum_free_bytes="$(awk '$2 ~ /^[0-9]+$/ { if (minimum == "" || $2 < minimum) minimum = $2 } END { print minimum }' "${monitor_log}")"
+            final_free_bytes="$(awk '$2 ~ /^[0-9]+$/ { final = $2 } END { print final }' "${monitor_log}")"
+            if [[ "${initial_free_bytes}" =~ ^[0-9]+$ \
+                  && "${minimum_free_bytes}" =~ ^[0-9]+$ \
+                  && "${final_free_bytes}" =~ ^[0-9]+$ ]]; then
+              peak_consumed_bytes=$((initial_free_bytes - minimum_free_bytes))
+              retained_bytes=$((initial_free_bytes - final_free_bytes))
+              echo "Initial free bytes: ${initial_free_bytes}"
+              echo "Minimum free bytes: ${minimum_free_bytes}"
+              echo "Sampled peak consumed bytes: ${peak_consumed_bytes}"
+              echo "Final free bytes: ${final_free_bytes}"
+              echo "Retained bytes after build: ${retained_bytes}"
+            fi
+            echo "Recent disk samples:"
+            tail -n 20 "${monitor_log}"
+          else
+            echo "Disk monitor did not produce samples."
+          fi
+
+          df -h "${AGILE_SONIC_DOCKER_ROOT:-/}"
+          docker system df || true
+          docker buildx du || true
+
+      - name: Enforce GHCR layer-size margin
+        shell: bash
+        env:
+          CANDIDATE_REF: ${{ steps.candidate.outputs.ref }}
+        run: |
+          set -Eeuo pipefail
+          manifest="$(docker buildx imagetools inspect --raw "${CANDIDATE_REF}")"
+          image_digest="$(
+            python3 scripts/_image_manifest.py platform-digest <<<"${manifest}"
+          )"
+          if [[ -n "${image_digest}" ]]; then
+            manifest="$(docker buildx imagetools inspect --raw "${{ env.IMAGE_NAME }}@${image_digest}")"
+          fi
+
+          max_layer_size="$(
+            python3 scripts/_image_manifest.py max-layer-size <<<"${manifest}"
+          )"
+          # GitHub documents a 10 GB hard limit. Keep 500 MB of headroom for
+          # registry/accounting differences and future dependency drift.
+          layer_limit=9500000000
+          echo "Largest compressed image layer: ${max_layer_size} bytes"
+          if (( max_layer_size >= layer_limit )); then
+            echo "::error::Largest layer is ${max_layer_size} bytes; required margin is below ${layer_limit}"
+            exit 1
+          fi
+
+      - name: Promote candidate to release tags
+        shell: bash
+        env:
+          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+          IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          set -Eeuo pipefail
+          [[ "${IMAGE_DIGEST}" =~ ^sha256:[0-9a-f]{64}$ ]] || {
+            echo "::error::Build produced an invalid image digest: ${IMAGE_DIGEST}"
+            exit 1
+          }
+          promote_args=(buildx imagetools create)
+          while IFS= read -r image_tag; do
+            [[ -n "${image_tag}" ]] || continue
+            promote_args+=(--tag "${image_tag}")
+          done <<<"${IMAGE_TAGS}"
+          (( ${#promote_args[@]} > 3 )) || {
+            echo "::error::docker/metadata-action produced no release tags"
+            exit 1
+          }
+          docker "${promote_args[@]}" "${{ env.IMAGE_NAME }}@${IMAGE_DIGEST}"
+
+      - name: Attest image provenance
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
+        with:
+          subject-name: ${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
