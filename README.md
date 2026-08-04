@@ -30,11 +30,14 @@ The current verified artifact is the `training` target built from commit
 [`4655f45`](https://github.com/cyfarwydd-tian/Agile-Sonic-training/commit/4655f4545db5b249349bed43a90cb7d7ba8f88ee).
 
 - [Successful GitHub Actions run](https://github.com/cyfarwydd-tian/Agile-Sonic-training/actions/runs/30813887535)
+- [Pinned publish workflow](https://github.com/cyfarwydd-tian/Agile-Sonic-training/blob/4655f4545db5b249349bed43a90cb7d7ba8f88ee/.github/workflows/container.yml#L192)
+- Image target: `training`
 - Build and publish time: 15 minutes 9 seconds
 - Sampled peak disk consumption: 54,868,590,592 bytes
 - Minimum remaining runner space: 57,332,219,904 bytes
 - Largest compressed layer: 4,420,997,816 bytes
-- GHCR layer check, tag promotion and provenance attestation: passed
+- GHCR layer check and release-tag promotion: passed
+- [Provenance attestation](https://github.com/cyfarwydd-tian/Agile-Sonic-training/attestations/38569052): passed
 
 Pull the exact immutable image:
 
@@ -50,8 +53,7 @@ docker pull ghcr.io/cyfarwydd-tian/agile-sonic-training:sha-4655f45-training
 ```
 
 The package currently permits anonymous manifest access. A GHCR login is not
-required for this public build. See [PARTNER_BUILD.md](PARTNER_BUILD.md) for the
-short partner handoff.
+required for this public build.
 
 This digest passed a clean two-GPU RTX PRO 6000 Blackwell deployment, automatic
 NCCL 2.26.5 activation, a 1 GiB NCCL stress gate and a real two-rank H20 PPO
@@ -269,8 +271,22 @@ agile-sonic-launch --gpu-count <GPU_COUNT> -- <training arguments...>
 
 The first production phase uses Accelerate DDP on one multi-GPU host.
 DeepSpeed/FSDP and multi-node RDMA require separate validation.
-See [docs/multi_gpu_training_strategy.md](docs/multi_gpu_training_strategy.md)
-for the topology, sizing, acceptance, resume and failure-handling policy.
+
+## Partner deployment checklist
+
+Use the immutable digest above, then complete these host-specific gates before
+starting a production run:
+
+1. Install a CUDA 12.8-compatible NVIDIA driver, Docker Engine and NVIDIA
+   Container Toolkit. Driver `595.58.03` is the verified RTX PRO 6000
+   Blackwell combination, not an exact requirement.
+2. Mount the pinned private `sonic-training` checkout, datasets, `/runs` and
+   `/cache`; none of them are included in the public image.
+3. Start through `scripts/run.sh` or `compose.yaml` so host IPC, unlimited
+   memlock, resource limits, GPU selection and persistent paths are applied.
+4. Run strict preflight, NCCL, the real two-update H20 smoke and checkpoint
+   resume on the production GPU topology.
+5. Complete a sustained all-GPU stability/load test before the full job.
 
 ## SSH and credentials
 
@@ -314,8 +330,6 @@ scripts/preflight.sh             runtime dependency and mount checks
 scripts/nccl-smoke.sh            single-node NCCL test
 scripts/launch-multigpu.sh       Accelerate DDP launcher
 .github/workflows/container.yml  GitHub Actions build and publication
-PARTNER_BUILD.md                 exact partner build handoff
-docs/multi_gpu_training_strategy.md single-node DDP strategy and acceptance gates
 ```
 
 Architecture and dependency decisions are documented in

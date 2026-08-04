@@ -20,3 +20,6 @@ compose.secrets*.yaml
 # Local-only Vast.ai deployment and validation records
 VastAI.md
 VASTAI_*.md
+
+# Local-only operator strategy notes
+docs/multi_gpu_training_strategy.md
