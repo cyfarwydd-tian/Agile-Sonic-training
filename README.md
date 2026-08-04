@@ -269,6 +269,8 @@ agile-sonic-launch --gpu-count <GPU_COUNT> -- <training arguments...>
 
 The first production phase uses Accelerate DDP on one multi-GPU host.
 DeepSpeed/FSDP and multi-node RDMA require separate validation.
+See [docs/multi_gpu_training_strategy.md](docs/multi_gpu_training_strategy.md)
+for the topology, sizing, acceptance, resume and failure-handling policy.
 
 ## SSH and credentials
 
@@ -313,6 +315,7 @@ scripts/nccl-smoke.sh            single-node NCCL test
 scripts/launch-multigpu.sh       Accelerate DDP launcher
 .github/workflows/container.yml  GitHub Actions build and publication
 PARTNER_BUILD.md                 exact partner build handoff
+docs/multi_gpu_training_strategy.md single-node DDP strategy and acceptance gates
 ```
 
 Architecture and dependency decisions are documented in

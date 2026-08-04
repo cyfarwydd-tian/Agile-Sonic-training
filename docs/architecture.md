@@ -98,10 +98,10 @@ Torch、Isaac Sim 主组件、Isaac extension cache 和项目依赖必须分层�
 每个发布镜像都应记录 source revision、目标名称、digest、SBOM/provenance，以及
 各环境实际安装清单。合作伙伴部署时使用 digest，而不是可变的 `latest`。
 
-## H20 支持边界
+## H20 与 GPU 支持边界
 
-Isaac Sim 5.1 的官方 requirements 页面现已标记为停止支持；官方列出的测试 GPU
-是 RTX 系列，并明确将没有 RT Core 的 A100/H100 列为不支持。H20 没有出现在该
-版本的支持矩阵中。因此这里的 H20 + headless 方案是针对 SONIC 项目的工程验证
-路径，不是 NVIDIA 官方兼容性声明。每个新驱动、镜像 digest 和服务器型号组合都
-必须重新执行 preflight、NCCL、最小 PPO、checkpoint 恢复与稳定性测试。
+H20 是 Agile 机器人型号，不是本项目的训练 GPU。当前容器已在 RTX PRO 6000
+Blackwell 上完成 CUDA、Isaac、NCCL 和真实 H20 PPO 验证。这是针对特定
+镜像、驱动和服务器拓扑的工程验证，不是 NVIDIA 对所有组合的官方兼容性
+声明。每个新驱动、镜像 digest 和服务器拓扑组合都必须重新执行 preflight、
+NCCL、最小 PPO、checkpoint 恢复与稳定性测试。
